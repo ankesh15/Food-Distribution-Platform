@@ -2,6 +2,18 @@
 
 A comprehensive web application that connects food donors (restaurants, bakeries, event caterers) with local NGOs, shelters, and individuals to schedule and fulfill food pickups, reducing waste and supporting communities in need.
 
+##Preview 
+<img width="1905" height="1096" alt="Screenshot 2025-08-07 210504" src="https://github.com/user-attachments/assets/8afcfc44-d44d-4e6b-aaf4-569a42b15057" />
+
+
+
+
+
+
+
+
+
+
 ## 🚀 Features
 
 ### ✅ **User Authentication & Management**
@@ -104,7 +116,7 @@ A comprehensive web application that connects food donors (restaurants, bakeries
 1. **Clone the repository**
 
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/ankesh15/Food-Distribution-Platform
    cd "Food ditribution platform"
    ```
 
@@ -297,19 +309,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **MongoDB** for the flexible database solution
 - **Node.js Community** for the robust ecosystem
 
-## 🎉 Status
 
-**✅ COMPLETE AND READY FOR PRODUCTION**
-
-This Food Distribution Platform is now fully functional with all requested features implemented:
-
-- ✅ Dashboard functionality
-- ✅ Create Donation form
-- ✅ Profile management
-- ✅ Admin panel
-- ✅ User authentication
-- ✅ Real-time features
-- ✅ Responsive design
-- ✅ Clean, warning-free code
-
-The application is ready for deployment and use! 🚀
