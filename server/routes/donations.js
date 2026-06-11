@@ -7,7 +7,7 @@ const { sendDonationNotification, sendClaimNotification } = require('../services
 
 const router = express.Router();
 
-// Get all donations (with filters)
+// Get all donations (with filters + search)
 router.get('/', async (req, res) => {
   try {
     const { 
@@ -15,6 +15,7 @@ router.get('/', async (req, res) => {
       limit = 10, 
       status, 
       foodType, 
+      search,
       latitude, 
       longitude, 
       maxDistance = 50,
@@ -29,6 +30,15 @@ router.get('/', async (req, res) => {
     if (status) query.status = status;
     if (foodType) query.foodType = foodType;
     if (isUrgent !== undefined) query.isUrgent = isUrgent === 'true';
+
+    // Text search by title/description
+    if (search && search.trim()) {
+      query.$or = [
+        { title: { $regex: search.trim(), $options: 'i' } },
+        { description: { $regex: search.trim(), $options: 'i' } },
+        { 'location.address.city': { $regex: search.trim(), $options: 'i' } }
+      ];
+    }
 
     // Geospatial query if coordinates provided
     if (latitude && longitude) {
@@ -48,8 +58,8 @@ router.get('/', async (req, res) => {
 
     const donations = await Donation.find(query)
       .sort(sortOptions)
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit))
       .populate('donor', 'profile.firstName profile.lastName profile.organization')
       .populate('claimedBy.recipient', 'profile.firstName profile.lastName profile.organization');
 
@@ -57,7 +67,7 @@ router.get('/', async (req, res) => {
 
     res.json({
       donations,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil(total / parseInt(limit)),
       currentPage: parseInt(page),
       total
     });
@@ -87,8 +97,9 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create new donation
+// Create new donation — authenticateToken MUST come before requireDonor
 router.post('/', [
+  authenticateToken,
   requireDonor,
   body('title')
     .trim()
@@ -134,13 +145,7 @@ router.post('/', [
   body('location.address.zipCode')
     .trim()
     .isLength({ min: 1 })
-    .withMessage('Zip code is required'),
-  body('location.coordinates')
-    .isArray({ min: 2, max: 2 })
-    .withMessage('Coordinates must be an array with 2 elements'),
-  body('location.coordinates.*')
-    .isFloat()
-    .withMessage('Coordinates must be numbers')
+    .withMessage('Zip code is required')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -151,29 +156,28 @@ router.post('/', [
       });
     }
 
-    const donation = new Donation({
-      ...req.body,
-      donor: req.user._id
-    });
+    // Build donation data — coordinates are optional (fallback to [0,0])
+    const donationData = { ...req.body, donor: req.user._id };
 
+    // Ensure location.coordinates structure exists
+    if (!donationData.location) donationData.location = {};
+    if (!donationData.location.coordinates || !donationData.location.coordinates.coordinates) {
+      donationData.location.coordinates = {
+        type: 'Point',
+        coordinates: [0, 0] // Fallback — no geocoding API key configured
+      };
+    }
+
+    const donation = new Donation(donationData);
     await donation.save();
 
-    // Send notifications to nearby recipients
+    // Send notifications to nearby recipients (best-effort)
     try {
       const nearbyRecipients = await User.find({
         role: 'recipient',
         isActive: true,
-        'preferences.emailNotifications': true,
-        'profile.location.coordinates': {
-          $near: {
-            $geometry: {
-              type: 'Point',
-              coordinates: donation.location.coordinates.coordinates
-            },
-            $maxDistance: 50 * 1609.34 // 50 miles in meters
-          }
-        }
-      }).limit(50); // Limit to prevent spam
+        'preferences.emailNotifications': true
+      }).limit(50);
 
       if (nearbyRecipients.length > 0) {
         await sendDonationNotification(nearbyRecipients, donation);
@@ -203,6 +207,7 @@ router.post('/', [
 
 // Update donation
 router.put('/:id', [
+  authenticateToken,
   requireDonor,
   body('title')
     .optional()
@@ -254,8 +259,8 @@ router.put('/:id', [
   }
 });
 
-// Claim donation
-router.post('/:id/claim', requireRecipient, async (req, res) => {
+// Claim donation — allow advance claims (before pickup window starts)
+router.post('/:id/claim', authenticateToken, requireRecipient, async (req, res) => {
   try {
     const donation = await Donation.findById(req.params.id);
 
@@ -267,16 +272,20 @@ router.post('/:id/claim', requireRecipient, async (req, res) => {
       return res.status(400).json({ message: 'Donation is not available for claiming' });
     }
 
-    // Check if pickup window is still active
-    const now = new Date();
-    if (now < donation.pickupWindow.startTime || now > donation.pickupWindow.endTime) {
-      return res.status(400).json({ message: 'Pickup window is not active' });
+    // Check if donation has expired
+    if (donation.expiryDate <= new Date()) {
+      return res.status(400).json({ message: 'This donation has expired' });
+    }
+
+    // Check if pickup window has already ended
+    if (donation.pickupWindow.endTime <= new Date()) {
+      return res.status(400).json({ message: 'Pickup window has ended' });
     }
 
     donation.status = 'claimed';
     donation.claimedBy = {
       recipient: req.user._id,
-      claimedAt: now
+      claimedAt: new Date()
     };
 
     await donation.save();
@@ -312,7 +321,7 @@ router.post('/:id/claim', requireRecipient, async (req, res) => {
 });
 
 // Mark donation as picked up
-router.post('/:id/pickup', requireRecipient, async (req, res) => {
+router.post('/:id/pickup', authenticateToken, requireRecipient, async (req, res) => {
   try {
     const donation = await Donation.findById(req.params.id);
 
@@ -345,7 +354,7 @@ router.post('/:id/pickup', requireRecipient, async (req, res) => {
 });
 
 // Mark donation as completed
-router.post('/:id/complete', requireRecipient, async (req, res) => {
+router.post('/:id/complete', authenticateToken, requireRecipient, async (req, res) => {
   try {
     const donation = await Donation.findById(req.params.id);
 
@@ -377,8 +386,35 @@ router.post('/:id/complete', requireRecipient, async (req, res) => {
   }
 });
 
-// Delete donation
-router.delete('/:id', requireDonor, async (req, res) => {
+// Cancel donation
+router.post('/:id/cancel', authenticateToken, requireDonor, async (req, res) => {
+  try {
+    const donation = await Donation.findById(req.params.id);
+
+    if (!donation) {
+      return res.status(404).json({ message: 'Donation not found' });
+    }
+
+    if (donation.donor.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to cancel this donation' });
+    }
+
+    if (donation.status === 'completed') {
+      return res.status(400).json({ message: 'Cannot cancel a completed donation' });
+    }
+
+    donation.status = 'cancelled';
+    await donation.save();
+
+    res.json({ message: 'Donation cancelled successfully', donation });
+  } catch (error) {
+    console.error('Cancel donation error:', error);
+    res.status(500).json({ message: 'Failed to cancel donation' });
+  }
+});
+
+// Delete donation — uses findByIdAndDelete (Mongoose 7 compat)
+router.delete('/:id', authenticateToken, requireDonor, async (req, res) => {
   try {
     const donation = await Donation.findById(req.params.id);
 
@@ -396,7 +432,7 @@ router.delete('/:id', requireDonor, async (req, res) => {
       return res.status(400).json({ message: 'Cannot delete claimed donation' });
     }
 
-    await donation.remove();
+    await Donation.findByIdAndDelete(req.params.id);
 
     res.json({ message: 'Donation deleted successfully' });
 
@@ -406,4 +442,4 @@ router.delete('/:id', requireDonor, async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

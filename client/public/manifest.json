@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "FoodShare",
+  "name": "FoodShare - Food Distribution Platform",
   "icons": [
     {
       "src": "favicon.ico",

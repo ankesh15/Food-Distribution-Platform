@@ -4,11 +4,13 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
+const path = require('path');
 const http = require('http');
 const socketIo = require('socket.io');
+const mongoSanitize = require('express-mongo-sanitize');
 
-// Load environment variables
-dotenv.config();
+// Load environment variables from project root
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const app = express();
 const server = http.createServer(app);
@@ -26,23 +28,27 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting
+// Rate limiting — relaxed for development
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: process.env.NODE_ENV === 'development' ? 1000 : 100,
+  message: { message: 'Too many requests, please try again later.' }
 });
 app.use('/api/', limiter);
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Database connection
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('Connected to MongoDB'))
-.catch(err => console.error('MongoDB connection error:', err));
+// Sanitize data against NoSQL injection
+app.use(mongoSanitize());
+
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Database connection (Mongoose 7+ does not need deprecated options)
+mongoose.connect(process.env.MONGODB_URI)
+.then(() => console.log('✅ Connected to MongoDB'))
+.catch(err => console.error('❌ MongoDB connection error:', err));
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
@@ -66,6 +72,24 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/donations', require('./routes/donations'));
 app.use('/api/admin', require('./routes/admin'));
+
+// Public stats endpoint (for home page counters)
+app.get('/api/stats/public', async (req, res) => {
+  try {
+    const User = require('./models/User');
+    const Donation = require('./models/Donation');
+    const [totalDonors, totalRecipients, totalDonations, completedDonations] = await Promise.all([
+      User.countDocuments({ role: 'donor', isActive: true }),
+      User.countDocuments({ role: 'recipient', isActive: true }),
+      Donation.countDocuments(),
+      Donation.countDocuments({ status: 'completed' })
+    ]);
+    const successRate = totalDonations > 0 ? Math.round((completedDonations / totalDonations) * 100) : 0;
+    res.json({ totalDonors, totalRecipients, totalDonations, completedDonations, successRate });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to get stats' });
+  }
+});
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -93,6 +117,9 @@ app.use('*', (req, res) => {
 const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV}`);
-}); 
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📦 Environment: ${process.env.NODE_ENV}`);
+});
+
+// Export app for testing
+module.exports = app;

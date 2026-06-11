@@ -17,7 +17,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
   }
 });
 
-// Update user profile
+// Update user profile — accepts both flat and nested structures
 router.put('/profile', [
   authenticateToken,
   body('firstName')
@@ -31,14 +31,10 @@ router.put('/profile', [
     .isLength({ min: 1 })
     .withMessage('Last name cannot be empty'),
   body('phone')
-    .optional()
-    .isMobilePhone()
-    .withMessage('Please provide a valid phone number'),
+    .optional(),
   body('organization')
     .optional()
-    .trim()
-    .isLength({ min: 1 })
-    .withMessage('Organization name cannot be empty'),
+    .trim(),
   body('preferences.emailNotifications')
     .optional()
     .isBoolean()
@@ -61,15 +57,33 @@ router.put('/profile', [
       });
     }
 
-    const { firstName, lastName, phone, organization, address, preferences } = req.body;
+    const { firstName, lastName, phone, organization, address, preferences, profile } = req.body;
+
+    // Support both flat fields and nested profile object from frontend
+    const profileData = profile || {};
+    const fn = firstName || profileData.firstName;
+    const ln = lastName || profileData.lastName;
+    const ph = phone || profileData.phone;
+    const org = organization || profileData.organization;
+    const addr = address || profileData.address;
 
     // Update profile fields
-    if (firstName) req.user.profile.firstName = firstName;
-    if (lastName) req.user.profile.lastName = lastName;
-    if (phone) req.user.profile.phone = phone;
-    if (organization) req.user.profile.organization = organization;
-    if (address) req.user.profile.address = { ...req.user.profile.address, ...address };
-    if (preferences) req.user.preferences = { ...req.user.preferences, ...preferences };
+    if (fn) req.user.profile.firstName = fn;
+    if (ln) req.user.profile.lastName = ln;
+    if (ph !== undefined) req.user.profile.phone = ph;
+    if (org !== undefined) req.user.profile.organization = org;
+    if (addr !== undefined) req.user.profile.address = addr;
+    if (preferences) {
+      if (preferences.emailNotifications !== undefined) {
+        req.user.preferences.emailNotifications = preferences.emailNotifications;
+      }
+      if (preferences.smsNotifications !== undefined) {
+        req.user.preferences.smsNotifications = preferences.smsNotifications;
+      }
+      if (preferences.maxDistance !== undefined) {
+        req.user.preferences.maxDistance = preferences.maxDistance;
+      }
+    }
 
     await req.user.save();
 
@@ -84,6 +98,50 @@ router.put('/profile', [
   }
 });
 
+// Change password
+router.put('/password', [
+  authenticateToken,
+  body('currentPassword')
+    .notEmpty()
+    .withMessage('Current password is required'),
+  body('newPassword')
+    .isLength({ min: 6 })
+    .withMessage('New password must be at least 6 characters')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    // Need to re-fetch user WITH password field
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Verify current password
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Current password is incorrect' });
+    }
+
+    // Set new password (will be hashed by pre-save hook)
+    user.password = newPassword;
+    await user.save();
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ message: 'Failed to change password' });
+  }
+});
+
 // Get user's donations (for donors)
 router.get('/donations', authenticateToken, async (req, res) => {
   try {
@@ -95,16 +153,16 @@ router.get('/donations', authenticateToken, async (req, res) => {
 
     const donations = await Donation.find(query)
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit))
       .populate('claimedBy.recipient', 'profile.firstName profile.lastName profile.organization');
 
     const total = await Donation.countDocuments(query);
 
     res.json({
       donations,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
+      totalPages: Math.ceil(total / parseInt(limit)),
+      currentPage: parseInt(page),
       total
     });
 
@@ -125,16 +183,16 @@ router.get('/claimed-donations', authenticateToken, async (req, res) => {
 
     const donations = await Donation.find(query)
       .sort({ 'claimedBy.claimedAt': -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit))
       .populate('donor', 'profile.firstName profile.lastName profile.organization');
 
     const total = await Donation.countDocuments(query);
 
     res.json({
       donations,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
+      totalPages: Math.ceil(total / parseInt(limit)),
+      currentPage: parseInt(page),
       total
     });
 
@@ -210,4 +268,4 @@ router.get('/nearby-recipients', authenticateToken, async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

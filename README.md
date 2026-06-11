@@ -3,7 +3,7 @@
 A comprehensive web application that connects food donors (restaurants, bakeries, event caterers) with local NGOs, shelters, and individuals to schedule and fulfill food pickups, reducing waste and supporting communities in need.
 
 ##Preview 
-<img width="1905" height="1096" alt="Screenshot 2025-08-07 210504" src="https://github.com/user-attachments/assets/8afcfc44-d44d-4e6b-aaf4-569a42b15057" />
+![DEMO](image.png)
 
 
 
@@ -71,12 +71,14 @@ A comprehensive web application that connects food donors (restaurants, bakeries
 
 ### **Frontend**
 
-- **React 19.1.1** with modern hooks and functional components
-- **Material-UI 7.3.1** for beautiful, responsive UI components
-- **React Router 7.7.1** for client-side routing
-- **Axios 1.11.0** for HTTP requests
-- **Date-fns 2.30.0** for date manipulation
-- **@mui/x-date-pickers 7.3.1** for date/time selection
+- **React 19.1.1** with modern functional hooks and Context API
+- **Tailwind CSS v3.4.15** for utility-first layout design and glassmorphic dashboards
+- **Framer Motion** for premium interactive animations and state transitions
+- **Material-UI (MUI) v5/v6** for specialized theme baseline and pickers
+- **React Router DOM v6** with secure Route Guard layers
+- **Axios v1.11.0** for HTTP communication and automatic token refresh interceptors
+- **Date-fns v2.30.0** for date format parsing
+- **@mui/x-date-pickers** for pickup scheduling
 
 ### **Backend**
 
@@ -247,6 +249,19 @@ Food ditribution platform/
 - `DELETE /api/admin/donations/:id` - Delete donation (admin only)
 
 ## 🎯 Key Features Implemented
+
+### **Routing & Session Redirection**
+
+- **Automatic Portal Transitions**: Logged-in users are automatically redirected from marketing paths (`/`, `/login`, `/register`) to `/dashboard`.
+- **Layout Guards (`LayoutWrapper`)**: Conditionally serves the premium `DashboardLayout` for authenticated views, and the clean public layout for guest views.
+- **Anchor Section Linkage**: Fully supports direct scrolling to home sections (`#features`, `#about`, `#contact`) from anywhere in the application.
+- **Robust Route Guarding**: Unauthenticated users are prevented from visiting protected portals (e.g. `/dashboard`, `/analytics`, `/requests`).
+
+### **Modern Responsive Design**
+
+- **Tailwind Sticky Top Navbar**: A unified glassmorphism-based top navigation replaces legacy side navigation, maximizing dashboard screen space.
+- **Active Navigation Highlighting**: High-contrast, dynamic Tailwind CSS styling indicates current location paths.
+- **Mobile First Adaptation**: Fully interactive mobile hamburger menus with a sleek animated drawer.
 
 ### **Dashboard Functionality**
 

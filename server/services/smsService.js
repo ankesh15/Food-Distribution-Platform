@@ -1,20 +1,28 @@
-const twilio = require('twilio');
+// Lazy-initialized Twilio client to avoid crashes when env vars are missing
 
-// Initialize Twilio client
-const client = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
+let client = null;
+
+const getClient = () => {
+  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+    return null;
+  }
+  if (!client) {
+    const twilio = require('twilio');
+    client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+  }
+  return client;
+};
 
 // Send SMS notification
 const sendSMS = async (to, message) => {
   try {
-    if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+    const twilioClient = getClient();
+    if (!twilioClient) {
       console.log('Twilio credentials not configured, skipping SMS');
       return;
     }
 
-    const result = await client.messages.create({
+    const result = await twilioClient.messages.create({
       body: message,
       from: process.env.TWILIO_PHONE_NUMBER,
       to: to
@@ -24,7 +32,7 @@ const sendSMS = async (to, message) => {
     return result;
   } catch (error) {
     console.error('SMS sending error:', error);
-    throw error;
+    // Don't throw — SMS failures shouldn't break the app
   }
 };
 
@@ -76,4 +84,4 @@ module.exports = {
   sendClaimNotificationSMS,
   sendPickupReminderSMS,
   sendUrgentReminderSMS
-}; 
+};

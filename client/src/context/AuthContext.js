@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const AuthContext = createContext();
@@ -20,13 +20,84 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Donation API methods
+// Response interceptor for automatic token refresh
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    // If 401 and not already retrying
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return api(originalRequest);
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (!refreshToken) {
+        isRefreshing = false;
+        return Promise.reject(error);
+      }
+
+      try {
+        const { data } = await axios.post('http://localhost:5000/api/auth/refresh', {
+          refreshToken,
+        });
+
+        localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('refreshToken', data.refreshToken);
+
+        api.defaults.headers.Authorization = `Bearer ${data.accessToken}`;
+        processQueue(null, data.accessToken);
+        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+
+        return api(originalRequest);
+      } catch (refreshError) {
+        processQueue(refreshError, null);
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+// ─── Donation API Methods ───────────────────────────────────
+
 const getDonations = async (filters = {}) => {
   try {
     const response = await api.get('/donations', { params: filters });
     return response.data;
   } catch (error) {
-    return [];
+    return { donations: [], totalPages: 0, currentPage: 1, total: 0 };
   }
 };
 
@@ -44,7 +115,37 @@ const createDonation = async (donationData) => {
     const response = await api.post('/donations', donationData);
     return { success: true, donation: response.data };
   } catch (error) {
-    const message = error.response?.data?.message || 'Failed to create donation';
+    const message = error.response?.data?.message || error.response?.data?.errors?.[0]?.msg || 'Failed to create donation';
+    return { success: false, error: message };
+  }
+};
+
+const updateDonation = async (id, donationData) => {
+  try {
+    const response = await api.put(`/donations/${id}`, donationData);
+    return { success: true, donation: response.data };
+  } catch (error) {
+    const message = error.response?.data?.message || 'Failed to update donation';
+    return { success: false, error: message };
+  }
+};
+
+const deleteDonation = async (id) => {
+  try {
+    await api.delete(`/donations/${id}`);
+    return { success: true };
+  } catch (error) {
+    const message = error.response?.data?.message || 'Failed to delete donation';
+    return { success: false, error: message };
+  }
+};
+
+const cancelDonation = async (id) => {
+  try {
+    const response = await api.post(`/donations/${id}/cancel`);
+    return { success: true, donation: response.data };
+  } catch (error) {
+    const message = error.response?.data?.message || 'Failed to cancel donation';
     return { success: false, error: message };
   }
 };
@@ -59,14 +160,111 @@ const claimDonation = async (id) => {
   }
 };
 
-const getMyDonations = async () => {
+const pickupDonation = async (id) => {
   try {
-    const response = await api.get('/users/donations');
-    return response.data;
+    const response = await api.post(`/donations/${id}/pickup`);
+    return { success: true, donation: response.data };
+  } catch (error) {
+    const message = error.response?.data?.message || 'Failed to mark donation as picked up';
+    return { success: false, error: message };
+  }
+};
+
+const completeDonation = async (id) => {
+  try {
+    const response = await api.post(`/donations/${id}/complete`);
+    return { success: true, donation: response.data };
+  } catch (error) {
+    const message = error.response?.data?.message || 'Failed to complete donation';
+    return { success: false, error: message };
+  }
+};
+
+const getMyDonations = async (filters = {}) => {
+  try {
+    const response = await api.get('/users/donations', { params: filters });
+    return response.data.donations || [];
   } catch (error) {
     return [];
   }
 };
+
+const getMyClaimedDonations = async (filters = {}) => {
+  try {
+    const response = await api.get('/users/claimed-donations', { params: filters });
+    return response.data.donations || [];
+  } catch (error) {
+    return [];
+  }
+};
+
+// ─── Admin API Methods ──────────────────────────────────────
+
+const getAdminStats = async () => {
+  try {
+    const response = await api.get('/admin/stats');
+    return response.data;
+  } catch (error) {
+    return null;
+  }
+};
+
+const getAdminUsers = async (filters = {}) => {
+  try {
+    const response = await api.get('/admin/users', { params: filters });
+    return response.data;
+  } catch (error) {
+    return { users: [], totalPages: 0, currentPage: 1, total: 0 };
+  }
+};
+
+const getAdminDonations = async (filters = {}) => {
+  try {
+    const response = await api.get('/admin/donations', { params: filters });
+    return response.data;
+  } catch (error) {
+    return { donations: [], totalPages: 0, currentPage: 1, total: 0 };
+  }
+};
+
+const toggleUserStatus = async (userId, isActive) => {
+  try {
+    const response = await api.patch(`/admin/users/${userId}/status`, { isActive });
+    return { success: true, user: response.data.user };
+  } catch (error) {
+    return { success: false, error: error.response?.data?.message || 'Failed to update user status' };
+  }
+};
+
+const adminDeleteDonation = async (id) => {
+  try {
+    await api.delete(`/admin/donations/${id}`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.response?.data?.message || 'Failed to delete donation' };
+  }
+};
+
+const changePassword = async (currentPassword, newPassword) => {
+  try {
+    const response = await api.put('/users/password', { currentPassword, newPassword });
+    return { success: true, message: response.data.message };
+  } catch (error) {
+    const message = error.response?.data?.message || 'Failed to change password';
+    return { success: false, error: message };
+  }
+};
+
+const getPublicStats = async () => {
+  try {
+    const response = await api.get('/stats/public');
+    return response.data;
+  } catch (error) {
+    return null;
+  }
+};
+
+// ─── Auth Provider ──────────────────────────────────────────
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -89,6 +287,7 @@ export const AuthProvider = ({ children }) => {
     } else {
       setLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const verifyToken = async () => {
@@ -135,7 +334,6 @@ export const AuthProvider = ({ children }) => {
 
       return { success: true };
     } catch (error) {
-      // Show all errors if available
       const message =
         error.response?.data?.errors ||
         error.response?.data?.message ||
@@ -184,11 +382,27 @@ export const AuthProvider = ({ children }) => {
     updateProfile,
     clearError,
     api,
+    // Donation methods
     getDonations,
     getDonationById,
     createDonation,
+    updateDonation,
+    deleteDonation,
+    cancelDonation,
     claimDonation,
+    pickupDonation,
+    completeDonation,
     getMyDonations,
+    getMyClaimedDonations,
+    // Admin methods
+    getAdminStats,
+    getAdminUsers,
+    getAdminDonations,
+    toggleUserStatus,
+    adminDeleteDonation,
+    // Account methods
+    changePassword,
+    getPublicStats,
   };
 
   return (
@@ -196,4 +410,4 @@ export const AuthProvider = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
-}; 
+};

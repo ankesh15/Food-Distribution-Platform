@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import {
-  Container,
   Typography,
   Box,
   Card,
@@ -39,7 +38,7 @@ import {
 } from '@mui/icons-material';
 
 const Profile = () => {
-  const { user, updateProfile, logout } = useAuth();
+  const { user, updateProfile, changePassword, logout } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -108,7 +107,6 @@ const Profile = () => {
     setLoading(true);
 
     try {
-      // Validate password change if attempting to change password
       if (formData.password.new || formData.password.current) {
         if (!formData.password.current) {
           setError('Current password is required to change password');
@@ -125,6 +123,13 @@ const Profile = () => {
           setLoading(false);
           return;
         }
+
+        const passwordResult = await changePassword(formData.password.current, formData.password.new);
+        if (!passwordResult.success) {
+          setError(passwordResult.error);
+          setLoading(false);
+          return;
+        }
       }
 
       const updateData = {
@@ -132,20 +137,11 @@ const Profile = () => {
         preferences: formData.preferences,
       };
 
-      // Only include password if user is changing it
-      if (formData.password.new) {
-        updateData.password = {
-          current: formData.password.current,
-          new: formData.password.new,
-        };
-      }
-
       const result = await updateProfile(updateData);
       
       if (result.success) {
         setSuccess('Profile updated successfully!');
         setIsEditing(false);
-        // Clear password fields
         setFormData(prev => ({
           ...prev,
           password: { current: '', new: '', confirm: '' }
@@ -164,7 +160,6 @@ const Profile = () => {
     setIsEditing(false);
     setError('');
     setSuccess('');
-    // Reset form data to original user data
     if (user) {
       setFormData({
         profile: {
@@ -195,60 +190,68 @@ const Profile = () => {
 
   if (!user) {
     return (
-      <Container maxWidth="lg" sx={{ py: 8 }}>
-        <Alert severity="error">Please log in to view your profile.</Alert>
-      </Container>
+      <Box sx={{ width: '100%' }}>
+        <Alert severity="error" variant="outlined" sx={{ borderRadius: 2.5 }}>
+          Please log in to view your profile settings.
+        </Alert>
+      </Box>
     );
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Header */}
+    <Box sx={{ width: '100%' }}>
+      {/* Title Header */}
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h3" sx={{ fontWeight: 600, mb: 1 }}>
+        <Typography variant="h4" sx={{ fontWeight: 800, mb: 1, letterSpacing: '-0.5px' }}>
           Profile Settings
         </Typography>
-        <Typography variant="h6" color="text.secondary">
-          Manage your account information and preferences.
+        <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.9rem' }}>
+          Manage your personal information, security, and notification triggers.
         </Typography>
       </Box>
 
       {/* Alerts */}
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" variant="outlined" sx={{ mb: 3, borderRadius: 2 }} onClose={() => setError('')}>
           {error}
         </Alert>
       )}
       {success && (
-        <Alert severity="success" sx={{ mb: 3 }}>
+        <Alert severity="success" variant="outlined" sx={{ mb: 3, borderRadius: 2 }}>
           {success}
         </Alert>
       )}
 
       <Grid container spacing={4}>
-        {/* Profile Information */}
+        {/* Profile Details (Left Side) */}
         <Grid item xs={12} lg={8}>
-          <Card>
-            <CardContent>
+          <Card sx={{ border: '1px solid #e2e8f0', bgcolor: 'white', borderRadius: 3, mb: 4 }}>
+            <CardContent sx={{ p: { xs: 3, md: 4 } }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h5" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center' }}>
-                  <PersonIcon sx={{ mr: 1 }} />
-                  Personal Information
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Box sx={{ width: 32, height: 32, borderRadius: 1.5, bgcolor: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <PersonIcon sx={{ fontSize: 18, color: '#10b981' }} />
+                  </Box>
+                  <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.3px' }}>
+                    Personal Information
+                  </Typography>
+                </Box>
                 {!isEditing ? (
                   <Button
-                    startIcon={<EditIcon />}
+                    startIcon={<EditIcon sx={{ fontSize: 16 }} />}
                     onClick={() => setIsEditing(true)}
                     variant="outlined"
+                    size="small"
                   >
                     Edit Profile
                   </Button>
                 ) : (
                   <Button
-                    startIcon={<CancelIcon />}
+                    startIcon={<CancelIcon sx={{ fontSize: 16 }} />}
                     onClick={handleCancel}
                     variant="outlined"
                     color="error"
+                    size="small"
                   >
                     Cancel
                   </Button>
@@ -282,13 +285,13 @@ const Profile = () => {
                   <Grid item xs={12}>
                     <TextField
                       fullWidth
-                      label="Email"
+                      label="Email Address"
                       value={user.email}
                       disabled
                       InputProps={{
-                        startAdornment: <EmailIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                        startAdornment: <EmailIcon sx={{ mr: 1, color: '#94a3b8', fontSize: 20 }} />,
                       }}
-                      helperText="Email cannot be changed"
+                      helperText="System email cannot be modified"
                     />
                   </Grid>
 
@@ -300,7 +303,7 @@ const Profile = () => {
                       onChange={(e) => handleInputChange('profile', 'phone', e.target.value)}
                       disabled={!isEditing}
                       InputProps={{
-                        startAdornment: <PhoneIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                        startAdornment: <PhoneIcon sx={{ mr: 1, color: '#94a3b8', fontSize: 20 }} />,
                       }}
                     />
                   </Grid>
@@ -313,7 +316,7 @@ const Profile = () => {
                       onChange={(e) => handleInputChange('profile', 'organization', e.target.value)}
                       disabled={!isEditing}
                       InputProps={{
-                        startAdornment: <BusinessIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                        startAdornment: <BusinessIcon sx={{ mr: 1, color: '#94a3b8', fontSize: 20 }} />,
                       }}
                     />
                   </Grid>
@@ -328,21 +331,21 @@ const Profile = () => {
                       multiline
                       rows={2}
                       InputProps={{
-                        startAdornment: <LocationIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                        startAdornment: <LocationIcon sx={{ mr: 1, color: '#94a3b8', fontSize: 20 }} />,
                       }}
                     />
                   </Grid>
 
                   <Grid item xs={12}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 1 }}>
                       <Chip
-                        label={user.role}
+                        label={user.role.toUpperCase()}
                         color="primary"
                         variant="outlined"
-                        size="small"
+                        sx={{ fontWeight: 800, fontSize: '0.65rem', height: 22 }}
                       />
-                      <Typography variant="body2" color="text.secondary">
-                        Account Type
+                      <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500 }}>
+                        Vetted account role access
                       </Typography>
                     </Box>
                   </Grid>
@@ -351,13 +354,17 @@ const Profile = () => {
             </CardContent>
           </Card>
 
-          {/* Password Change Section */}
-          <Card sx={{ mt: 3 }}>
-            <CardContent>
-              <Typography variant="h5" sx={{ fontWeight: 600, mb: 3, display: 'flex', alignItems: 'center' }}>
-                <SecurityIcon sx={{ mr: 1 }} />
-                Change Password
-              </Typography>
+          {/* Change Password Panel */}
+          <Card sx={{ border: '1px solid #e2e8f0', bgcolor: 'white', borderRadius: 3 }}>
+            <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
+                <Box sx={{ width: 32, height: 32, borderRadius: 1.5, bgcolor: 'rgba(245, 158, 11, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <SecurityIcon sx={{ fontSize: 18, color: '#f59e0b' }} />
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.3px' }}>
+                  Update Security Credentials
+                </Typography>
+              </Box>
 
               <Grid container spacing={3}>
                 <Grid item xs={12}>
@@ -368,13 +375,15 @@ const Profile = () => {
                     value={formData.password.current}
                     onChange={(e) => handleInputChange('password', 'current', e.target.value)}
                     disabled={!isEditing}
+                    placeholder="••••••••"
                     InputProps={{
                       endAdornment: (
                         <IconButton
                           onClick={() => setShowPassword(!showPassword)}
                           edge="end"
+                          sx={{ color: '#94a3b8' }}
                         >
-                          {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                          {showPassword ? <VisibilityOffIcon sx={{ fontSize: 20 }} /> : <VisibilityIcon sx={{ fontSize: 20 }} />}
                         </IconButton>
                       ),
                     }}
@@ -389,6 +398,7 @@ const Profile = () => {
                     value={formData.password.new}
                     onChange={(e) => handleInputChange('password', 'new', e.target.value)}
                     disabled={!isEditing}
+                    placeholder="Min 6 characters"
                     helperText="Minimum 6 characters"
                   />
                 </Grid>
@@ -401,6 +411,7 @@ const Profile = () => {
                     value={formData.password.confirm}
                     onChange={(e) => handleInputChange('password', 'confirm', e.target.value)}
                     disabled={!isEditing}
+                    placeholder="Retype password"
                     error={formData.password.new !== formData.password.confirm && formData.password.confirm !== ''}
                     helperText={formData.password.new !== formData.password.confirm && formData.password.confirm !== '' ? 'Passwords do not match' : ''}
                   />
@@ -410,17 +421,20 @@ const Profile = () => {
           </Card>
         </Grid>
 
-        {/* Preferences and Account Info */}
+        {/* Preferences & Info (Right Side) */}
         <Grid item xs={12} lg={4}>
-          {/* Preferences */}
-          <Card sx={{ mb: 3 }}>
-            <CardContent>
-              <Typography variant="h5" sx={{ fontWeight: 600, mb: 3, display: 'flex', alignItems: 'center' }}>
-                <NotificationIcon sx={{ mr: 1 }} />
-                Preferences
-              </Typography>
+          <Card sx={{ border: '1px solid #e2e8f0', bgcolor: 'white', borderRadius: 3, mb: 3 }}>
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
+                <Box sx={{ width: 32, height: 32, borderRadius: 1.5, bgcolor: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <NotificationIcon sx={{ fontSize: 18, color: '#10b981' }} />
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.3px' }}>
+                  Notification Triggers
+                </Typography>
+              </Box>
 
-              <Stack spacing={3}>
+              <Stack spacing={2.5}>
                 <FormControlLabel
                   control={
                     <Switch
@@ -429,7 +443,11 @@ const Profile = () => {
                       disabled={!isEditing}
                     />
                   }
-                  label="Email Notifications"
+                  label={
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                      Email Notification Alerts
+                    </Typography>
+                  }
                 />
 
                 <FormControlLabel
@@ -440,73 +458,80 @@ const Profile = () => {
                       disabled={!isEditing}
                     />
                   }
-                  label="SMS Notifications"
+                  label={
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                      SMS Text Messages
+                    </Typography>
+                  }
                 />
 
-                <FormControl fullWidth>
-                  <InputLabel>Max Distance (miles)</InputLabel>
+                <FormControl fullWidth size="small" sx={{ mt: 1 }}>
+                  <InputLabel>Max Radius Range</InputLabel>
                   <Select
                     value={formData.preferences.maxDistance}
                     onChange={(e) => handleInputChange('preferences', 'maxDistance', e.target.value)}
-                    label="Max Distance (miles)"
+                    label="Max Radius Range"
                     disabled={!isEditing}
+                    sx={{ borderRadius: 2 }}
                   >
-                    <MenuItem value={10}>10 miles</MenuItem>
-                    <MenuItem value={25}>25 miles</MenuItem>
-                    <MenuItem value={50}>50 miles</MenuItem>
-                    <MenuItem value={100}>100 miles</MenuItem>
+                    <MenuItem value={10}>10 miles radius</MenuItem>
+                    <MenuItem value={25}>25 miles radius</MenuItem>
+                    <MenuItem value={50}>50 miles radius</MenuItem>
+                    <MenuItem value={100}>100 miles radius</MenuItem>
                   </Select>
                 </FormControl>
               </Stack>
             </CardContent>
           </Card>
 
-          {/* Account Information */}
-          <Card>
-            <CardContent>
-              <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
-                Account Information
+          {/* System Info & Logs */}
+          <Card sx={{ border: '1px solid #e2e8f0', bgcolor: 'white', borderRadius: 3 }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 800, mb: 3, letterSpacing: '-0.3px' }}>
+                Account Meta
               </Typography>
 
-              <Stack spacing={2}>
+              <Stack spacing={2.5}>
                 <Box>
-                  <Typography variant="body2" color="text.secondary">
-                    Member Since
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block' }}>
+                    MEMBER SINCE
                   </Typography>
-                  <Typography variant="body1">
+                  <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.2 }}>
                     {new Date(user.createdAt).toLocaleDateString()}
                   </Typography>
                 </Box>
 
                 <Box>
-                  <Typography variant="body2" color="text.secondary">
-                    Last Login
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block' }}>
+                    LAST SYSTEM ACCESS
                   </Typography>
-                  <Typography variant="body1">
-                    {user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}
+                  <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.2 }}>
+                    {user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Today'}
                   </Typography>
                 </Box>
 
                 <Box>
-                  <Typography variant="body2" color="text.secondary">
-                    Account Status
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block', mb: 0.5 }}>
+                    STATUS KEY
                   </Typography>
                   <Chip
-                    label={user.isActive ? 'Active' : 'Inactive'}
+                    label={user.isActive ? 'ACTIVE WORKSPACE' : 'INACTIVE'}
                     color={user.isActive ? 'success' : 'error'}
                     size="small"
+                    sx={{ fontWeight: 800, fontSize: '0.65rem', height: 20 }}
                   />
                 </Box>
 
-                <Divider />
+                <Divider sx={{ my: 1 }} />
 
                 <Button
                   variant="outlined"
                   color="error"
                   onClick={handleLogout}
                   fullWidth
+                  sx={{ py: 1 }}
                 >
-                  Logout
+                  Logout Session
                 </Button>
               </Stack>
             </CardContent>
@@ -514,22 +539,23 @@ const Profile = () => {
         </Grid>
       </Grid>
 
-      {/* Save Button */}
+      {/* Save Button (Action Bar) */}
       {isEditing && (
         <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end' }}>
           <Button
             variant="contained"
-            startIcon={loading ? <CircularProgress size={20} /> : <SaveIcon />}
+            startIcon={loading ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <SaveIcon />}
             onClick={handleSubmit}
             disabled={loading}
             size="large"
+            sx={{ px: 4 }}
           >
-            {loading ? 'Saving...' : 'Save Changes'}
+            {loading ? 'Saving Changes...' : 'Save Settings'}
           </Button>
         </Box>
       )}
-    </Container>
+    </Box>
   );
 };
 
-export default Profile; 
+export default Profile;

@@ -88,7 +88,7 @@ const donationSchema = new mongoose.Schema({
       },
       coordinates: {
         type: [Number],
-        required: true
+        default: [0, 0]
       }
     },
     instructions: {
@@ -119,8 +119,7 @@ const donationSchema = new mongoose.Schema({
   },
   images: [{
     url: {
-      type: String,
-      required: true
+      type: String
     },
     caption: {
       type: String,
@@ -161,6 +160,9 @@ donationSchema.index({ "location.coordinates": "2dsphere" });
 donationSchema.index({ status: 1, "pickupWindow.startTime": 1 });
 donationSchema.index({ donor: 1, status: 1 });
 donationSchema.index({ "claimedBy.recipient": 1 });
+
+// Text index for search by title and description
+donationSchema.index({ title: "text", description: "text" });
 
 // Virtual for distance calculation (will be populated by application logic)
 donationSchema.virtual('distance').get(function() {
@@ -204,4 +206,4 @@ donationSchema.pre('save', function(next) {
 // Ensure virtual fields are serialized
 donationSchema.set('toJSON', { virtuals: true });
 
-module.exports = mongoose.model('Donation', donationSchema); 
+module.exports = mongoose.model('Donation', donationSchema);

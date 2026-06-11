@@ -30,6 +30,7 @@ import {
   Add as AddIcon,
   Save as SaveIcon,
   ArrowBack as BackIcon,
+  WarningAmber as WarningIcon,
 } from '@mui/icons-material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -48,14 +49,14 @@ const CreateDonation = () => {
     foodType: '',
     quantity: {
       amount: '',
-      unit: 'pounds'
+      unit: 'servings'
     },
     allergens: [],
     preparationDate: new Date(),
-    expiryDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow
+    expiryDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
     pickupWindow: {
-      startTime: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours from now
-      endTime: new Date(Date.now() + 6 * 60 * 60 * 1000), // 6 hours from now
+      startTime: new Date(Date.now() + 2 * 60 * 60 * 1000),
+      endTime: new Date(Date.now() + 6 * 60 * 60 * 1000),
     },
     location: {
       address: {
@@ -79,7 +80,7 @@ const CreateDonation = () => {
   ];
 
   const units = [
-    'pounds', 'kilograms', 'servings', 'items', 'boxes', 'containers'
+    'servings', 'items', 'kilograms', 'pounds', 'boxes', 'containers'
   ];
 
   const allergenOptions = [
@@ -87,29 +88,31 @@ const CreateDonation = () => {
   ];
 
   const handleInputChange = (field, value) => {
-    if (field.includes('.')) {
-      const [parent, child] = field.split('.');
-      setFormData(prev => ({
-        ...prev,
-        [parent]: {
-          ...prev[parent],
-          [child]: value
-        }
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [field]: value
-      }));
-    }
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
-  const handleNestedInputChange = (parent, child, value) => {
+  const handleNestedChange = (parent, child, value) => {
     setFormData(prev => ({
       ...prev,
       [parent]: {
         ...prev[parent],
         [child]: value
+      }
+    }));
+  };
+
+  const handleAddressChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      location: {
+        ...prev.location,
+        address: {
+          ...prev.location.address,
+          [field]: value
+        }
       }
     }));
   };
@@ -171,12 +174,26 @@ const CreateDonation = () => {
 
     setLoading(true);
     try {
-      const result = await createDonation(formData);
+      const payload = {
+        ...formData,
+        quantity: {
+          amount: parseFloat(formData.quantity.amount),
+          unit: formData.quantity.unit
+        },
+        preparationDate: new Date(formData.preparationDate).toISOString(),
+        expiryDate: new Date(formData.expiryDate).toISOString(),
+        pickupWindow: {
+          startTime: new Date(formData.pickupWindow.startTime).toISOString(),
+          endTime: new Date(formData.pickupWindow.endTime).toISOString(),
+        }
+      };
+
+      const result = await createDonation(payload);
       if (result.success) {
         setSuccess('Donation created successfully!');
         setTimeout(() => {
           navigate('/dashboard');
-        }, 2000);
+        }, 1500);
       } else {
         setError(result.error);
       }
@@ -187,11 +204,11 @@ const CreateDonation = () => {
     }
   };
 
-  if (!user || user.role !== 'donor') {
+  if (!user || (user.role !== 'donor' && user.role !== 'admin')) {
     return (
-      <Container maxWidth="lg" sx={{ py: 8 }}>
-        <Alert severity="error">
-          Only donors can create donations. Please contact an administrator if you need to change your role.
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Alert severity="error" variant="outlined" sx={{ borderRadius: 2.5 }}>
+          Only validated donors can create donations. Please contact admin support for credential checks.
         </Alert>
       </Container>
     );
@@ -199,46 +216,56 @@ const CreateDonation = () => {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        {/* Header */}
+      <Box sx={{ width: '100%' }}>
+        {/* Navigation Action */}
         <Box sx={{ mb: 4 }}>
           <Button
             startIcon={<BackIcon />}
             onClick={() => navigate('/dashboard')}
-            sx={{ mb: 2 }}
+            sx={{ 
+              fontWeight: 700, 
+              color: 'text.secondary',
+              '&:hover': { color: 'primary.main', bgcolor: 'rgba(16,185,129,0.05)' } 
+            }}
           >
-            Back to Dashboard
+            Dashboard
           </Button>
-          <Typography variant="h3" sx={{ fontWeight: 600, mb: 1 }}>
-            Create New Donation
+          <Typography variant="h4" sx={{ fontWeight: 800, mt: 1, letterSpacing: '-0.5px' }}>
+            List Surplus Donation
           </Typography>
-          <Typography variant="h6" color="text.secondary">
-            Share surplus food with local organizations and reduce waste.
+          <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.9rem' }}>
+            Provide accurate metrics and pickup timelines to ensure smooth distribution.
           </Typography>
         </Box>
 
         {/* Alerts */}
         {error && (
-          <Alert severity="error" sx={{ mb: 3 }}>
+          <Alert severity="error" variant="outlined" sx={{ mb: 3, borderRadius: 2 }} onClose={() => setError('')}>
             {error}
           </Alert>
         )}
         {success && (
-          <Alert severity="success" sx={{ mb: 3 }}>
+          <Alert severity="success" variant="outlined" sx={{ mb: 3, borderRadius: 2 }}>
             {success}
           </Alert>
         )}
 
-        <Card>
-          <CardContent>
+        <Card sx={{ border: '1px solid #e2e8f0', bgcolor: 'white', borderRadius: 3 }}>
+          <CardContent sx={{ p: { xs: 3, md: 5 } }}>
             <form onSubmit={handleSubmit}>
-              <Grid container spacing={3}>
-                {/* Basic Information */}
+              <Grid container spacing={3.5}>
+                
+                {/* 1. Food Details */}
                 <Grid item xs={12}>
-                  <Typography variant="h5" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center' }}>
-                    <FoodIcon sx={{ mr: 1 }} />
-                    Food Information
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+                    <Box sx={{ width: 32, height: 32, borderRadius: 1.5, bgcolor: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <FoodIcon sx={{ fontSize: 18, color: '#10b981' }} />
+                    </Box>
+                    <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.3px' }}>
+                      Food Information
+                    </Typography>
+                  </Box>
+                  <Divider sx={{ mt: 1.5 }} />
                 </Grid>
 
                 <Grid item xs={12}>
@@ -247,7 +274,7 @@ const CreateDonation = () => {
                     label="Donation Title"
                     value={formData.title}
                     onChange={(e) => handleInputChange('title', e.target.value)}
-                    placeholder="e.g., Fresh Bread from Local Bakery"
+                    placeholder="e.g., Fresh Artisan Bread & Loaves"
                     required
                   />
                 </Grid>
@@ -258,7 +285,7 @@ const CreateDonation = () => {
                     label="Description"
                     value={formData.description}
                     onChange={(e) => handleInputChange('description', e.target.value)}
-                    placeholder="Describe the food items, condition, and any special notes"
+                    placeholder="Provide condition details, preparation notes, refrigeration guidelines, etc."
                     multiline
                     rows={3}
                     required
@@ -267,11 +294,13 @@ const CreateDonation = () => {
 
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth required>
-                    <InputLabel>Food Type</InputLabel>
+                    <InputLabel id="food-type-label">Food Category</InputLabel>
                     <Select
+                      labelId="food-type-label"
                       value={formData.foodType}
                       onChange={(e) => handleInputChange('foodType', e.target.value)}
-                      label="Food Type"
+                      label="Food Category"
+                      sx={{ borderRadius: 2 }}
                     >
                       {foodTypes.map(type => (
                         <MenuItem key={type} value={type}>
@@ -288,27 +317,36 @@ const CreateDonation = () => {
                       <Checkbox
                         checked={formData.isUrgent}
                         onChange={(e) => handleInputChange('isUrgent', e.target.checked)}
+                        sx={{ color: '#cbd5e1', '&.Mui-checked': { color: '#ef4444' } }}
                       />
                     }
-                    label="Urgent - Needs pickup soon"
+                    label={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: formData.isUrgent ? '#ef4444' : '#475569' }}>
+                          Mark as Urgent
+                        </Typography>
+                        <WarningIcon sx={{ fontSize: 16, color: '#ef4444', display: formData.isUrgent ? 'inline-block' : 'none' }} />
+                      </Box>
+                    }
                   />
                 </Grid>
 
                 <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
-                    label="Quantity"
+                    label="Quantity Metrics"
                     type="number"
                     value={formData.quantity.amount}
-                    onChange={(e) => handleNestedInputChange('quantity', 'amount', parseFloat(e.target.value))}
+                    onChange={(e) => handleNestedChange('quantity', 'amount', e.target.value)}
+                    required
                     InputProps={{
                       endAdornment: (
                         <InputAdornment position="end">
-                          <FormControl sx={{ minWidth: 120 }}>
+                          <FormControl sx={{ minWidth: 110 }} size="small">
                             <Select
                               value={formData.quantity.unit}
-                              onChange={(e) => handleNestedInputChange('quantity', 'unit', e.target.value)}
-                              size="small"
+                              onChange={(e) => handleNestedChange('quantity', 'unit', e.target.value)}
+                              sx={{ border: 'none', '& .MuiOutlinedInput-notchedOutline': { border: 'none' } }}
                             >
                               {units.map(unit => (
                                 <MenuItem key={unit} value={unit}>
@@ -320,82 +358,103 @@ const CreateDonation = () => {
                         </InputAdornment>
                       ),
                     }}
-                    required
                   />
                 </Grid>
 
+                <Grid item xs={12} sm={6} />
+
                 <Grid item xs={12} sm={6}>
                   <DateTimePicker
-                    label="Preparation Date"
+                    label="Preparation Time"
                     value={formData.preparationDate}
                     onChange={(newValue) => handleInputChange('preparationDate', newValue)}
-                    renderInput={(params) => <TextField {...params} fullWidth />}
+                    slotProps={{ textField: { fullWidth: true } }}
                   />
                 </Grid>
 
                 <Grid item xs={12} sm={6}>
                   <DateTimePicker
-                    label="Expiry Date"
+                    label="Expiry Time Limit"
                     value={formData.expiryDate}
                     onChange={(newValue) => handleInputChange('expiryDate', newValue)}
-                    renderInput={(params) => <TextField {...params} fullWidth />}
                     minDateTime={new Date()}
+                    slotProps={{ textField: { fullWidth: true } }}
                   />
                 </Grid>
 
-                {/* Allergens */}
+                {/* Allergens selection */}
                 <Grid item xs={12}>
-                  <Typography variant="h6" sx={{ mb: 2 }}>
-                    Allergens (select all that apply)
+                  <Typography variant="body2" sx={{ fontWeight: 700, mb: 1.5, color: '#475569' }}>
+                    Allergen Warnings
                   </Typography>
                   <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                    {allergenOptions.map(allergen => (
-                      <Chip
-                        key={allergen}
-                        label={allergen}
-                        onClick={() => handleAllergenChange(allergen)}
-                        color={formData.allergens.includes(allergen) ? 'primary' : 'default'}
-                        variant={formData.allergens.includes(allergen) ? 'filled' : 'outlined'}
-                        sx={{ mb: 1 }}
-                      />
-                    ))}
+                    {allergenOptions.map(allergen => {
+                      const selected = formData.allergens.includes(allergen);
+                      return (
+                        <Chip
+                          key={allergen}
+                          label={allergen.toUpperCase()}
+                          onClick={() => handleAllergenChange(allergen)}
+                          color={selected ? 'primary' : 'default'}
+                          variant={selected ? 'filled' : 'outlined'}
+                          sx={{ 
+                            fontWeight: 700, 
+                            fontSize: '0.75rem', 
+                            height: 28,
+                            borderColor: selected ? 'primary.main' : '#cbd5e1',
+                            bgcolor: selected ? 'primary.main' : 'transparent',
+                            color: selected ? 'white' : '#64748b'
+                          }}
+                        />
+                      );
+                    })}
                   </Stack>
                 </Grid>
 
-                <Grid item xs={12}>
-                  <Divider sx={{ my: 2 }} />
-                  <Typography variant="h5" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center' }}>
-                    <TimeIcon sx={{ mr: 1 }} />
-                    Pickup Details
-                  </Typography>
+                {/* 2. Logistics & Pickup Window */}
+                <Grid item xs={12} sx={{ mt: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+                    <Box sx={{ width: 32, height: 32, borderRadius: 1.5, bgcolor: 'rgba(245, 158, 11, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <TimeIcon sx={{ fontSize: 18, color: '#f59e0b' }} />
+                    </Box>
+                    <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.3px' }}>
+                      Logistic Pickup Windows
+                    </Typography>
+                  </Box>
+                  <Divider sx={{ mt: 1.5 }} />
                 </Grid>
 
                 <Grid item xs={12} sm={6}>
                   <DateTimePicker
-                    label="Pickup Start Time"
+                    label="Pickup Window Start"
                     value={formData.pickupWindow.startTime}
-                    onChange={(newValue) => handleNestedInputChange('pickupWindow', 'startTime', newValue)}
-                    renderInput={(params) => <TextField {...params} fullWidth />}
+                    onChange={(newValue) => handleNestedChange('pickupWindow', 'startTime', newValue)}
                     minDateTime={new Date()}
+                    slotProps={{ textField: { fullWidth: true } }}
                   />
                 </Grid>
 
                 <Grid item xs={12} sm={6}>
                   <DateTimePicker
-                    label="Pickup End Time"
+                    label="Pickup Window End"
                     value={formData.pickupWindow.endTime}
-                    onChange={(newValue) => handleNestedInputChange('pickupWindow', 'endTime', newValue)}
-                    renderInput={(params) => <TextField {...params} fullWidth />}
+                    onChange={(newValue) => handleNestedChange('pickupWindow', 'endTime', newValue)}
                     minDateTime={formData.pickupWindow.startTime}
+                    slotProps={{ textField: { fullWidth: true } }}
                   />
                 </Grid>
 
-                <Grid item xs={12}>
-                  <Divider sx={{ my: 2 }} />
-                  <Typography variant="h5" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center' }}>
-                    <LocationIcon sx={{ mr: 1 }} />
-                    Location
-                  </Typography>
+                {/* 3. Address & Coordinates */}
+                <Grid item xs={12} sx={{ mt: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+                    <Box sx={{ width: 32, height: 32, borderRadius: 1.5, bgcolor: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <LocationIcon sx={{ fontSize: 18, color: '#10b981' }} />
+                    </Box>
+                    <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.3px' }}>
+                      Location Coordinates
+                    </Typography>
+                  </Box>
+                  <Divider sx={{ mt: 1.5 }} />
                 </Grid>
 
                 <Grid item xs={12}>
@@ -403,8 +462,8 @@ const CreateDonation = () => {
                     fullWidth
                     label="Street Address"
                     value={formData.location.address.street}
-                    onChange={(e) => handleNestedInputChange('location.address', 'street', e.target.value)}
-                    placeholder="123 Main Street"
+                    onChange={(e) => handleAddressChange('street', e.target.value)}
+                    placeholder="e.g., 100 Main St Suite 4B"
                     required
                   />
                 </Grid>
@@ -414,7 +473,7 @@ const CreateDonation = () => {
                     fullWidth
                     label="City"
                     value={formData.location.address.city}
-                    onChange={(e) => handleNestedInputChange('location.address', 'city', e.target.value)}
+                    onChange={(e) => handleAddressChange('city', e.target.value)}
                     required
                   />
                 </Grid>
@@ -424,7 +483,7 @@ const CreateDonation = () => {
                     fullWidth
                     label="State"
                     value={formData.location.address.state}
-                    onChange={(e) => handleNestedInputChange('location.address', 'state', e.target.value)}
+                    onChange={(e) => handleAddressChange('state', e.target.value)}
                     required
                   />
                 </Grid>
@@ -434,7 +493,7 @@ const CreateDonation = () => {
                     fullWidth
                     label="ZIP Code"
                     value={formData.location.address.zipCode}
-                    onChange={(e) => handleNestedInputChange('location.address', 'zipCode', e.target.value)}
+                    onChange={(e) => handleAddressChange('zipCode', e.target.value)}
                     required
                   />
                 </Grid>
@@ -442,54 +501,55 @@ const CreateDonation = () => {
                 <Grid item xs={12}>
                   <TextField
                     fullWidth
-                    label="Pickup Instructions"
+                    label="Additional Coordination Notes"
                     value={formData.location.instructions}
-                    onChange={(e) => handleNestedInputChange('location', 'instructions', e.target.value)}
-                    placeholder="e.g., Ring doorbell, call when arriving, etc."
+                    onChange={(e) => handleNestedChange('location', 'instructions', e.target.value)}
+                    placeholder="e.g., Back door loading dock, ring intercom 23..."
                     multiline
                     rows={2}
                   />
                 </Grid>
 
-                <Grid item xs={12}>
-                  <Divider sx={{ my: 2 }} />
-                  <Typography variant="h5" sx={{ fontWeight: 600, mb: 2 }}>
-                    Additional Information
+                {/* 4. Tags & Extra Metadata */}
+                <Grid item xs={12} sx={{ mt: 2 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 800, mb: 1, letterSpacing: '-0.3px' }}>
+                    Metadata Tags
                   </Typography>
+                  <Divider sx={{ mb: 2 }} />
                 </Grid>
 
                 <Grid item xs={12}>
                   <TextField
                     fullWidth
-                    label="Special Instructions"
+                    label="Extra Instructions"
                     value={formData.specialInstructions}
                     onChange={(e) => handleInputChange('specialInstructions', e.target.value)}
-                    placeholder="Any special handling requirements or additional notes"
+                    placeholder="Special requests or handling rules..."
                     multiline
                     rows={2}
+                    sx={{ mb: 3 }}
                   />
-                </Grid>
 
-                <Grid item xs={12}>
-                  <Typography variant="h6" sx={{ mb: 2 }}>
-                    Tags (optional)
-                  </Typography>
-                  <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                  <Box sx={{ display: 'flex', gap: 1.5, mb: 2.5, alignItems: 'center' }}>
                     <TextField
-                      size="small"
-                      placeholder="Add a tag"
+                      label="Add Keyword Tag"
+                      placeholder="e.g., refrigerated, organic"
                       value={newTag}
                       onChange={(e) => setNewTag(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
+                      size="small"
+                      sx={{ minWidth: 200 }}
                     />
                     <Button
                       variant="outlined"
                       onClick={handleAddTag}
                       startIcon={<AddIcon />}
+                      sx={{ py: 1 }}
                     >
-                      Add
+                      Add Tag
                     </Button>
                   </Box>
+                  
                   <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                     {formData.tags.map(tag => (
                       <Chip
@@ -498,40 +558,43 @@ const CreateDonation = () => {
                         onDelete={() => handleRemoveTag(tag)}
                         color="primary"
                         variant="outlined"
-                        sx={{ mb: 1 }}
+                        sx={{ fontWeight: 600 }}
                       />
                     ))}
                   </Stack>
                 </Grid>
 
-                {/* Submit Button */}
+                {/* Submissions Control */}
                 <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+                  <Divider sx={{ my: 2 }} />
+                  <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 1 }}>
                     <Button
                       variant="outlined"
                       onClick={() => navigate('/dashboard')}
                       disabled={loading}
+                      sx={{ color: '#475569', borderColor: '#cbd5e1' }}
                     >
-                      Cancel
+                      Cancel Listing
                     </Button>
                     <Button
                       type="submit"
                       variant="contained"
-                      startIcon={loading ? <CircularProgress size={20} /> : <SaveIcon />}
+                      startIcon={loading ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <SaveIcon />}
                       disabled={loading}
-                      size="large"
+                      sx={{ px: 4 }}
                     >
-                      {loading ? 'Creating...' : 'Create Donation'}
+                      {loading ? 'Creating...' : 'Submit Donation'}
                     </Button>
                   </Box>
                 </Grid>
+
               </Grid>
             </form>
           </CardContent>
         </Card>
-      </Container>
+      </Box>
     </LocalizationProvider>
   );
 };
 
-export default CreateDonation; 
+export default CreateDonation;

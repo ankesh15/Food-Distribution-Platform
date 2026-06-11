@@ -108,14 +108,14 @@ router.get('/users', async (req, res) => {
     const users = await User.find(query)
       .select('-password -refreshToken')
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit));
 
     const total = await User.countDocuments(query);
 
     res.json({
       users,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil(total / parseInt(limit)),
       currentPage: parseInt(page),
       total
     });
@@ -157,7 +157,7 @@ router.get('/users/:id', async (req, res) => {
   }
 });
 
-// Update user status
+// Update user status (activate/deactivate)
 router.patch('/users/:id/status', async (req, res) => {
   try {
     const { isActive } = req.body;
@@ -221,8 +221,8 @@ router.get('/donations', async (req, res) => {
 
     const donations = await Donation.find(query)
       .sort(sortOptions)
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit))
       .populate('donor', 'profile.firstName profile.lastName profile.organization email')
       .populate('claimedBy.recipient', 'profile.firstName profile.lastName profile.organization email');
 
@@ -230,7 +230,7 @@ router.get('/donations', async (req, res) => {
 
     res.json({
       donations,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil(total / parseInt(limit)),
       currentPage: parseInt(page),
       total
     });
@@ -260,7 +260,7 @@ router.get('/donations/:id', async (req, res) => {
   }
 });
 
-// Delete donation (admin override)
+// Delete donation (admin override) — uses findByIdAndDelete (Mongoose 7 compat)
 router.delete('/donations/:id', async (req, res) => {
   try {
     const donation = await Donation.findById(req.params.id);
@@ -269,7 +269,7 @@ router.delete('/donations/:id', async (req, res) => {
       return res.status(404).json({ message: 'Donation not found' });
     }
 
-    await donation.remove();
+    await Donation.findByIdAndDelete(req.params.id);
 
     res.json({ message: 'Donation deleted successfully' });
 
@@ -293,7 +293,6 @@ router.post('/reminders/inactive-users', async (req, res) => {
       'preferences.emailNotifications': true
     });
 
-    // TODO: Implement reminder email service
     console.log(`Found ${inactiveUsers.length} inactive users to remind`);
 
     res.json({
@@ -322,7 +321,6 @@ router.post('/reminders/pickup', async (req, res) => {
       }
     }).populate('claimedBy.recipient', 'email profile.firstName profile.lastName');
 
-    // TODO: Implement pickup reminder email service
     console.log(`Found ${donationsNeedingReminders.length} donations needing pickup reminders`);
 
     res.json({
@@ -336,4 +334,4 @@ router.post('/reminders/pickup', async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

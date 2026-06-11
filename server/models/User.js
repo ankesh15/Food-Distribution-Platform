@@ -8,7 +8,7 @@ const userSchema = new mongoose.Schema({
     unique: true,
     lowercase: true,
     trim: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
+    match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please enter a valid email']
   },
   password: {
     type: String,
@@ -90,6 +90,9 @@ const userSchema = new mongoose.Schema({
 // Index for geospatial queries
 userSchema.index({ "profile.location": "2dsphere" });
 
+// Text index for search
+userSchema.index({ "profile.firstName": "text", "profile.lastName": "text", "email": "text", "profile.organization": "text" });
+
 // Hash password before saving
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
@@ -124,4 +127,4 @@ userSchema.virtual('fullName').get(function() {
 // Ensure virtual fields are serialized
 userSchema.set('toJSON', { virtuals: true });
 
-module.exports = mongoose.model('User', userSchema); 
+module.exports = mongoose.model('User', userSchema);
