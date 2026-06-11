@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import { AnimatePresence, motion } from 'framer-motion';
+import { SOCKET_URL } from '../config';
 
 const NotificationContext = createContext();
 
@@ -65,8 +66,7 @@ export const NotificationProvider = ({ children }) => {
       return;
     }
 
-    const socketUrl = 'http://localhost:5000';
-    const newSocket = io(socketUrl, {
+    const newSocket = io(SOCKET_URL, {
       transports: ['websocket'],
     });
 

@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { API_URL } from '../config';
 
 const AuthContext = createContext();
 
 // Create axios instance with base URL
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -38,6 +39,17 @@ const processQueue = (error, token = null) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Production-safe network error handling
+    if (!error.response) {
+      error.response = {
+        status: 503,
+        data: {
+          message: 'Network Error: Cannot connect to the server. Please check your internet connection.'
+        }
+      };
+      return Promise.reject(error);
+    }
+
     const originalRequest = error.config;
 
     // If 401 and not already retrying
@@ -63,7 +75,7 @@ api.interceptors.response.use(
       }
 
       try {
-        const { data } = await axios.post('http://localhost:5000/api/auth/refresh', {
+        const { data } = await axios.post(`${API_URL}/auth/refresh`, {
           refreshToken,
         });
 
