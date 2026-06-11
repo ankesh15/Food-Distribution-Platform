@@ -18,7 +18,6 @@ import {
   Chip,
   IconButton,
   Alert,
-  CircularProgress,
   Stack,
   Tabs,
   Tab,
@@ -61,6 +60,7 @@ const AdminPanel = () => {
     if (user && user.role === 'admin') {
       fetchAdminData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const fetchAdminData = async () => {

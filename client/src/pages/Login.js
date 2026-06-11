@@ -19,7 +19,6 @@ import {
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
   Restaurant as LogoIcon,
-  HeartBrokenOutlined as HeartIcon,
   CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';

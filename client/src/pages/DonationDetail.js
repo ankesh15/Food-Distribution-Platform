@@ -19,7 +19,6 @@ import {
   ArrowBack as BackIcon,
   LocationOn as LocationIcon,
   Schedule as TimeIcon,
-  Restaurant as FoodIcon,
   Person as PersonIcon,
   Warning as UrgentIcon,
   CheckCircle as CompletedIcon,
@@ -110,7 +109,6 @@ const DonationDetail = () => {
   }
 
   const isRecipient = user && user.role === 'recipient';
-  const isDonor = user && (user.role === 'donor' || user.role === 'admin');
   const isClaimedByMe = donation.claimedBy?.recipient?._id === user?._id;
 
   return (
