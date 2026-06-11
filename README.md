@@ -191,7 +191,7 @@ Food ditribution platform/
 │   │   ├── App.js            # Main app component
 │   │   └── index.js          # App entry point
 │   ├── package.json          # Frontend dependencies
-│   └── README.md             # Frontend documentation
+|
 ├── server/                    # Node.js backend
 │   ├── middleware/           # Custom middleware
 │   │   └── auth.js           # Authentication middleware
@@ -321,7 +321,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Material-UI** for the beautiful component library
 - **React Community** for the excellent documentation and tools
-- **MongoDB** for the flexible database solution
+- **MongoDB** 
+for the flexible database solution
 - **Node.js Community** for the robust ecosystem
 
 
