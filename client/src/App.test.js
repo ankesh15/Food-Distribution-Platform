@@ -1,116 +1,39 @@
-import { render, screen } from '@testing-library/react';
 import React from 'react';
-
-// Mock react-router-dom
-jest.mock('react-router-dom', () => ({
-  BrowserRouter: ({ children }) => <div>{children}</div>,
-  Routes: ({ children }) => <div>{children}</div>,
-  Route: ({ element }) => element,
-  Link: ({ children, to }) => <a href={to}>{children}</a>,
-  Navigate: ({ to }) => <div data-testid="navigate" data-to={to}>Redirecting...</div>,
-  useNavigate: () => jest.fn(),
-  useLocation: () => ({ pathname: '/' }),
-  useParams: () => ({ id: '123' }),
-}));
-
-// Mock react-leaflet and leaflet
-jest.mock('react-leaflet', () => ({
-  MapContainer: ({ children }) => <div data-testid="map-container">{children}</div>,
-  TileLayer: () => <div data-testid="tile-layer" />,
-  Marker: ({ children }) => <div data-testid="marker">{children}</div>,
-  Popup: ({ children }) => <div data-testid="popup">{children}</div>,
-  Polyline: () => <div data-testid="polyline" />,
-  useMap: () => ({
-    setView: jest.fn(),
-  }),
-}));
-
-jest.mock('leaflet', () => {
-  const L = {
-    divIcon: jest.fn().mockReturnValue({}),
-    Icon: {
-      Default: {
-        prototype: {}
-      }
-    }
-  };
-  return L;
-});
-
-const mockUser = { role: 'admin', profile: { firstName: 'Admin', lastName: 'User' } };
-
-// Mock AuthContext with all methods
-jest.mock('./context/AuthContext', () => ({
-  useAuth: () => ({
-    user: mockUser,
-    loading: false,
-    login: jest.fn(),
-    register: jest.fn(),
-    logout: jest.fn(),
-    getPublicStats: jest.fn().mockResolvedValue({
-      totalDonors: 10,
-      totalRecipients: 5,
-      totalDonations: 100,
-      successRate: 95,
-    }),
-    getDonations: jest.fn().mockResolvedValue({ donations: [], totalPages: 1, total: 0 }),
-    claimDonation: jest.fn().mockResolvedValue({ success: true }),
-    getDonationById: jest.fn().mockResolvedValue(null),
-    createDonation: jest.fn().mockResolvedValue({ success: true }),
-    updateDonation: jest.fn().mockResolvedValue({ success: true }),
-    deleteDonation: jest.fn().mockResolvedValue({ success: true }),
-    cancelDonation: jest.fn().mockResolvedValue({ success: true }),
-    pickupDonation: jest.fn().mockResolvedValue({ success: true }),
-    completeDonation: jest.fn().mockResolvedValue({ success: true }),
-    getMyDonations: jest.fn().mockResolvedValue([]),
-    getMyClaimedDonations: jest.fn().mockResolvedValue([]),
-    getAdminStats: jest.fn().mockResolvedValue(null),
-    getAdminUsers: jest.fn().mockResolvedValue({ users: [], totalPages: 1 }),
-    getAdminDonations: jest.fn().mockResolvedValue({ donations: [], totalPages: 1 }),
-    toggleUserStatus: jest.fn().mockResolvedValue({ success: true }),
-    adminDeleteDonation: jest.fn().mockResolvedValue({ success: true }),
-    changePassword: jest.fn().mockResolvedValue({ success: true }),
-  }),
-  AuthProvider: ({ children }) => <div>{children}</div>,
-}));
-
-// Mock NotificationContext
-jest.mock('./context/NotificationContext', () => ({
-  useNotifications: () => ({
-    notifications: [],
-    unreadCount: 0,
-    markAsRead: jest.fn(),
-    markAllAsRead: jest.fn(),
-    deleteNotification: jest.fn(),
-    addNotification: jest.fn(),
-    toasts: [],
-  }),
-  NotificationProvider: ({ children }) => <div>{children}</div>,
-}));
-
-// Mock TrackingContext
-jest.mock('./context/TrackingContext', () => ({
-  useTracking: () => ({
-    activeDeliveries: [],
-    myLocation: null,
-    isTrackingSelf: false,
-    startTrackingSelf: jest.fn(),
-    stopTrackingSelf: jest.fn(),
-  }),
-  TrackingProvider: ({ children }) => <div>{children}</div>,
-}));
-
+import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders FoodShare application and navbar brand', () => {
-  render(<App />);
-  const brandElements = screen.getAllByText(/FoodShare/i);
-  expect(brandElements.length).toBeGreaterThan(0);
+const mockApi = { get: jest.fn() };
+const mockAuth = { user: null, loading: false, api: mockApi, getPublicStats: jest.fn(), getDonations: jest.fn() };
+jest.mock('./context/AuthContext', () => ({ useAuth: () => mockAuth, apiError: () => 'Server unavailable', AuthProvider: ({ children }) => children }));
+jest.mock('./context/NotificationContext', () => ({ useNotifications: () => ({ unreadCount: 0 }), NotificationProvider: ({ children }) => children }));
+jest.mock('./context/TrackingContext', () => ({ useTracking: () => ({ activeDeliveries: [] }), TrackingProvider: ({ children }) => children }));
+jest.mock('react-leaflet', () => ({ MapContainer: ({ children }) => <div>{children}</div>, TileLayer: () => null, CircleMarker: ({ children }) => <div>{children}</div>, Popup: ({ children }) => <div>{children}</div> }));
+beforeEach(() => {
+  window.history.pushState({}, '', '/');
+  mockAuth.user = null; mockAuth.loading = false;
+  mockAuth.getPublicStats.mockResolvedValue({ totalDonors: 0, totalRecipients: 0, totalDonations: 0, successRate: 0 });
+  mockApi.get.mockResolvedValue({ data: { states: {}, monthly: [], quantities: [], donations: [], totalPages: 0 } });
 });
-
-test('redirects authenticated users from public-only routes to dashboard', () => {
+test('renders the FoodShare landing page and accessible navigation', async () => {
   render(<App />);
-  const navigateEls = screen.getAllByTestId('navigate');
-  expect(navigateEls.length).toBeGreaterThan(0);
-  expect(navigateEls[0]).toHaveAttribute('data-to', '/dashboard');
+  expect(screen.getByRole('link', { name: 'FoodShare home' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Skip to content' })).toBeInTheDocument();
+  await screen.findByText('Good food. A clear path.');
+});
+test('authenticated public-route visitors reach the real dashboard route', async () => {
+  mockAuth.user = { _id: 'operator', role: 'admin', profile: { firstName: 'Admin' } };
+  render(<App />);
+  expect(await screen.findByRole('heading', { name: 'Welcome back, Admin.' })).toBeInTheDocument();
+  expect(window.location.pathname).toBe('/dashboard');
+});
+test('recipient cannot enter donor creation page', async () => {
+  mockAuth.user = { _id: 'recipient', role: 'recipient', profile: { firstName: 'Recipient' } };
+  window.history.pushState({}, '', '/create-donation'); render(<App />);
+  expect(await screen.findByRole('heading', { name: 'Welcome back, Recipient.' })).toBeInTheDocument();
+  expect(window.location.pathname).toBe('/dashboard');
+});
+test('unknown routes provide a recovery link', () => {
+  window.history.pushState({}, '', '/missing-page'); render(<App />);
+  expect(screen.getByRole('heading', { name: 'Page not found' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Browse available food' })).toHaveAttribute('href', '/donations');
 });

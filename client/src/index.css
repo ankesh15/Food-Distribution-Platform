@@ -113,3 +113,12 @@ a:focus-visible {
   outline: 2px solid #10b981;
   outline-offset: 2px;
 }
+
+/* Readable controls, keyboard access and reduced motion across both styling systems. */
+.skip-link { position: fixed; left: 1rem; top: -5rem; z-index: 10000; padding: .75rem 1rem; background: #fff; color: #065f46; border: 2px solid #047857; border-radius: .5rem; }
+.skip-link:focus { top: .75rem; }
+button, input, select, textarea { font: inherit; }
+:focus-visible { outline: 3px solid #047857; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

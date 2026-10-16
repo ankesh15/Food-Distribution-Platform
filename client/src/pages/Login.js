@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Typography,
   TextField,
@@ -25,6 +25,7 @@ import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, error, clearError } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
@@ -48,7 +49,7 @@ const Login = () => {
     const result = await login(formData.email, formData.password);
     
     if (result.success) {
-      navigate('/dashboard');
+      navigate(location.state?.from?.pathname || '/dashboard', { replace: true });
     }
     
     setLoading(false);
@@ -94,7 +95,7 @@ const Login = () => {
             Smarter Logistical Waste Management.
           </Typography>
           <Typography variant="body1" sx={{ color: '#94a3b8', mb: 4, lineHeight: 1.7 }}>
-            Sign in to access your dashboard. Manage incoming donations, track claim pickups, monitor local distribution, and report ESG metrics in real-time.
+            Sign in to access your dashboard. Manage incoming donations, track claim pickups, monitor local distribution, and review your donation history.
           </Typography>
           
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -112,7 +113,7 @@ const Login = () => {
         </Box>
 
         <Typography variant="caption" sx={{ color: '#64748b', position: 'relative' }}>
-          © {new Date().getFullYear()} FoodShare Inc. All rights reserved.
+          © {new Date().getFullYear()} FoodShare All rights reserved.
         </Typography>
       </Box>
 
@@ -140,7 +141,7 @@ const Login = () => {
           <CardContent sx={{ p: { xs: 4, sm: 5 } }}>
             <Box sx={{ mb: 4, textAlign: 'center' }}>
               <LogoIcon sx={{ fontSize: 48, color: '#10b981', mb: 2 }} />
-              <Typography variant="h4" sx={{ fontWeight: 800, mb: 1, letterSpacing: '-0.5px' }}>
+              <Typography component="h1" variant="h4" sx={{ fontWeight: 800, mb: 1, letterSpacing: '-0.5px' }}>
                 Welcome Back
               </Typography>
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -192,7 +193,7 @@ const Login = () => {
                   ),
                   endAdornment: (
                     <InputAdornment position="end">
-                      <IconButton onClick={() => setShowPassword(!showPassword)} edge="end" sx={{ color: '#94a3b8' }}>
+                      <IconButton aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(!showPassword)} edge="end" sx={{ color: '#94a3b8' }}>
                         {showPassword ? <VisibilityOffIcon sx={{ fontSize: 20 }} /> : <VisibilityIcon sx={{ fontSize: 20 }} />}
                       </IconButton>
                     </InputAdornment>

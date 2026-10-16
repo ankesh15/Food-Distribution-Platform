@@ -1,0 +1,70 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 DONE 0.0s
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 760B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:22-bookworm-slim
+#2 DONE 1.6s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 163B done
+#3 DONE 0.0s
+
+#4 [client-build 1/6] FROM docker.io/library/node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+#4 resolve docker.io/library/node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 0.0s done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 10.59kB done
+#5 DONE 0.0s
+
+#6 [runtime 2/8] WORKDIR /app
+#6 CACHED
+
+#7 [runtime 3/8] COPY package*.json ./
+#7 CACHED
+
+#8 [runtime 4/8] RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+#8 CACHED
+
+#9 [client-build 2/6] WORKDIR /app/client
+#9 CACHED
+
+#10 [client-build 5/6] COPY client/ ./
+#10 CACHED
+
+#11 [client-build 3/6] COPY client/package*.json ./
+#11 CACHED
+
+#12 [client-build 4/6] RUN npm ci
+#12 CACHED
+
+#13 [client-build 6/6] RUN npm run build
+#13 CACHED
+
+#14 [runtime 5/8] COPY server/ ./server/
+#14 DONE 0.0s
+
+#15 [runtime 6/8] COPY scripts/ ./scripts/
+#15 DONE 0.0s
+
+#16 [runtime 7/8] COPY --from=client-build /app/client/build ./client/build
+#16 DONE 0.0s
+
+#17 [runtime 8/8] RUN mkdir -p server/uploads && chown node:node server/uploads
+#17 DONE 0.2s
+
+#18 exporting to image
+#18 exporting layers
+#18 exporting layers 0.3s done
+#18 exporting manifest sha256:b7c05725b94c5f78c34a0b029aa2bbb7105d7ab22363392324c324387d1b43a9 0.0s done
+#18 exporting config sha256:6287ee5dbfb5d6d7ab8f455c81c6d8f4b864f1573d9b8c7ea588031c73921cdd done
+#18 exporting attestation manifest sha256:f3300d6f856b680f5272aaeab026b546cba1997c4eb514d03d27e0391a53ad30 done
+#18 exporting manifest list sha256:e26fe1111d6da77e619a36d12d3a2e2463e45bb5774fbe8a02b4122e942a1d9a done
+#18 naming to docker.io/library/foodshare-verification:local done
+#18 unpacking to docker.io/library/foodshare-verification:local 0.1s done
+#18 DONE 0.5s

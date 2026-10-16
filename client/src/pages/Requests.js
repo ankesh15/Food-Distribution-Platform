@@ -1,288 +1,58 @@
-import React, { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useNotifications } from '../context/NotificationContext';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Plus,
-  CheckCircle,
-  MapPin,
-  Inbox,
-  Send,
-} from 'lucide-react';
-
-const Requests = () => {
-  const { user } = useAuth();
-  const { addNotification } = useNotifications();
-  
-  const [requests, setRequests] = useState([
-    {
-      id: 1,
-      title: 'Emergency Hot Meals for Family Shelter',
-      description: 'Seeking prepared hot meals (rice, beans, protein) for 50 residents. Ready for immediate pickup.',
-      recipient: 'Brooklyn Hope Shelter',
-      foodType: 'prepared',
-      quantity: '50 servings',
-      location: 'Brooklyn, NY',
-      urgency: 'high',
-      status: 'open',
-      createdAt: new Date(Date.now() - 3600000).toISOString()
-    },
-    {
-      id: 2,
-      title: 'Pantry Staple Food Boxes Needed',
-      description: 'Looking for canned goods, dry beans, cereal, and long-life milk boxes for distribution.',
-      recipient: 'Harlem Family Center',
-      foodType: 'canned',
-      quantity: '20 boxes',
-      location: 'New York, NY',
-      urgency: 'medium',
-      status: 'open',
-      createdAt: new Date(Date.now() - 7200000).toISOString()
-    },
-    {
-      id: 3,
-      title: 'Baby Formula & Infant Food Supplies',
-      description: 'Urgently requesting dry formula tins (various brands) and baby jars for community nursery.',
-      recipient: 'Queens Nursery Care',
-      foodType: 'other',
-      quantity: '15 items',
-      location: 'Queens, NY',
-      urgency: 'high',
-      status: 'filled',
-      createdAt: new Date(Date.now() - 86400000).toISOString()
-    }
-  ]);
-
-  const [newRequestOpen, setNewRequestOpen] = useState(false);
-  const [form, setForm] = useState({
-    title: '',
-    description: '',
-    foodType: 'prepared',
-    quantity: '',
-    location: '',
-    urgency: 'medium'
-  });
-
-  const handleCreateRequest = (e) => {
-    e.preventDefault();
-    if (!form.title || !form.quantity) return;
-
-    const newReq = {
-      id: Date.now(),
-      title: form.title,
-      description: form.description,
-      recipient: user?.profile?.organization || `${user?.profile?.firstName} ${user?.profile?.lastName}`,
-      foodType: form.foodType,
-      quantity: form.quantity,
-      location: form.location || 'NYC',
-      urgency: form.urgency,
-      status: 'open',
-      createdAt: new Date().toISOString()
-    };
-
-    setRequests([newReq, ...requests]);
-    setNewRequestOpen(false);
-    setForm({
-      title: '',
-      description: '',
-      foodType: 'prepared',
-      quantity: '',
-      location: '',
-      urgency: 'medium'
-    });
-
-    addNotification(
-      'New Request Created',
-      `You published a food request: ${newReq.title}`,
-      'request'
-    );
+import React, { useState, useEffect, useCallback } from 'react';
+import { Box, Typography, Stack, Button, Card, CardContent, Grid, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Alert, Pagination } from '@mui/material';
+import { useAuth, apiError } from '../context/AuthContext';
+import PageFeedback from '../components/PageFeedback';
+import StatusChip from '../components/StatusChip';
+const initial = { title: '', description: '', foodType: 'other', quantity: '', location: '', urgency: 'medium' };
+export default function Requests() {
+  const { user, api } = useAuth();
+  const [requests, setRequests] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [formError, setFormError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(initial);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { const { data } = await api.get('/requests', { params: { page } }); setRequests(data.requests); setTotalPages(data.totalPages); setError(''); }
+    catch (err) { setError(apiError(err)); } finally { setLoading(false); }
+  }, [api, page]);
+  useEffect(() => { load(); }, [load]);
+  const submit = async event => {
+    event.preventDefault(); setBusy(true); setFormError('');
+    try { await api.post('/requests', form); setOpen(false); setForm(initial); await load(); }
+    catch (err) { setFormError(apiError(err)); } finally { setBusy(false); }
   };
-
-  const handleFillRequest = (reqId, title) => {
-    setRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'filled' } : r));
-    addNotification(
-      'Food Request Filled',
-      `You committed to supply: ${title}`,
-      'success'
-    );
+  const transition = async (request, status) => {
+    setBusy(true); setError('');
+    try {
+      if (status === 'commit') await api.post(`/requests/${request._id}/commit`);
+      else await api.patch(`/requests/${request._id}/status`, { status });
+      await load();
+    } catch (err) { setError(apiError(err)); } finally { setBusy(false); }
   };
-
-  return (
-    <div className="space-y-6">
-      {/* Title block */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">
-            Community Food Requests
-          </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Browse requests submitted by local NGOs and shelters or publish a new request.
-          </p>
-        </div>
-        {user?.role === 'recipient' && (
-          <button
-            onClick={() => setNewRequestOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-500/20"
-          >
-            <Plus size={16} /> Submit Request
-          </button>
-        )}
-      </div>
-
-      {/* Grid List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {requests.map((req) => (
-          <motion.div
-            key={req.id}
-            layout
-            className={`p-5 bg-white border rounded-2xl shadow-sm flex flex-col justify-between gap-4 transition-all duration-200 ${
-              req.status === 'filled' ? 'border-slate-100 opacity-70' : 'border-slate-200'
-            }`}
-          >
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className={`text-[9px] uppercase font-black px-2 py-0.5 rounded-full ${
-                  req.urgency === 'high'
-                    ? 'bg-red-500/10 text-red-600'
-                    : 'bg-amber-500/10 text-amber-600'
-                }`}>
-                  {req.urgency} Priority
-                </span>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  req.status === 'filled' ? 'bg-slate-100 text-slate-500' : 'bg-emerald-50 text-emerald-600'
-                }`}>
-                  {req.status.toUpperCase()}
-                </span>
-              </div>
-
-              <div>
-                <h4 className="font-extrabold text-sm text-slate-900">{req.title}</h4>
-                <span className="text-[10px] font-bold text-slate-400 block mt-0.5">
-                  {req.recipient} • {new Date(req.createdAt).toLocaleDateString()}
-                </span>
-              </div>
-
-              <p className="text-xs text-slate-600 leading-relaxed">
-                {req.description}
-              </p>
-            </div>
-
-            <div className="space-y-3 border-t border-slate-100 pt-3">
-              <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500">
-                <div className="flex items-center gap-1">
-                  <Inbox size={12} /> {req.quantity}
-                </div>
-                <div className="flex items-center gap-1">
-                  <MapPin size={12} /> {req.location}
-                </div>
-              </div>
-
-              {user?.role === 'donor' && req.status === 'open' && (
-                <button
-                  onClick={() => handleFillRequest(req.id, req.title)}
-                  className="w-full py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1"
-                >
-                  <CheckCircle size={14} /> Commit Supplies
-                </button>
-              )}
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Modal Dialog for New Request */}
-      <AnimatePresence>
-        {newRequestOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white border border-slate-200 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4"
-            >
-              <div className="flex justify-between items-center">
-                <h3 className="font-extrabold text-base text-slate-950">Submit Request</h3>
-                <button
-                  onClick={() => setNewRequestOpen(false)}
-                  className="text-slate-400 hover:text-slate-600 font-bold"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <form onSubmit={handleCreateRequest} className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700">Request Title *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 50 Servings for Homeless Center"
-                    value={form.title}
-                    onChange={e => setForm({ ...form, title: e.target.value })}
-                    className="w-full p-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700">Detailed Requirements</label>
-                  <textarea
-                    placeholder="Specify allergen concerns, packaging formats..."
-                    value={form.description}
-                    onChange={e => setForm({ ...form, description: e.target.value })}
-                    className="w-full p-2 text-xs border border-slate-200 rounded-lg h-20 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Quantity *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. 10 kg, 30 plates"
-                      value={form.quantity}
-                      onChange={e => setForm({ ...form, quantity: e.target.value })}
-                      className="w-full p-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Urgency</label>
-                    <select
-                      value={form.urgency}
-                      onChange={e => setForm({ ...form, urgency: e.target.value })}
-                      className="w-full p-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
-                    >
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700">Location</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Bronx, NY"
-                    value={form.location}
-                    onChange={e => setForm({ ...form, location: e.target.value })}
-                    className="w-full p-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20"
-                >
-                  <Send size={14} /> Send Request
-                </button>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
-
-export default Requests;
+  return <Box>
+    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between" sx={{ mb: 3 }}><Box><Typography component="h1" variant="h2">Community food requests</Typography><Typography color="text.secondary" sx={{ mt: 1 }}>Tell local donors what your community needs, and coordinate a supply commitment.</Typography></Box>{['recipient', 'admin'].includes(user.role) && <Button variant="contained" onClick={() => { setFormError(''); setOpen(true); }}>Submit request</Button>}</Stack>
+    <PageFeedback loading={loading} error={error} onRetry={load} empty={!requests.length && 'No community requests yet. New requests will appear here.'} />
+    {!loading && <Grid container spacing={3} sx={{ mt: 1 }}>{requests.map(request => <Grid key={request._id} size={{ xs: 12, md: 6, lg: 4 }}><Card sx={{ height: '100%' }}><CardContent sx={{ p: 3 }}>
+      <Stack direction="row" spacing={1} sx={{ mb: 2 }}><StatusChip status={request.status} /><Typography variant="caption" sx={{ color: request.urgency === 'high' ? '#b91c1c' : '#475569', py: 0.5 }}>{request.urgency} priority</Typography></Stack>
+      <Typography component="h2" variant="h3">{request.title}</Typography><Typography variant="body2" color="text.secondary" sx={{ my: 1 }}>{request.recipient?.profile?.organization || request.recipient?.profile?.firstName || 'Community member'}</Typography><Typography sx={{ my: 2 }}>{request.description}</Typography><Typography fontWeight={700}>{request.quantity}</Typography><Typography color="text.secondary">{request.location}</Typography>
+      {[['Recipient', request.recipient], ['Donor', request.committedBy]].map(([label, member]) => member?.profile?.phone ? <Typography variant="body2" sx={{ mt: 1 }} key={label}>{label}: <a href={`tel:${member.profile.phone}`}>{member.profile.phone}</a></Typography> : null)}
+      {request.committedBy && <Typography variant="body2" sx={{ mt: 2 }}>Supplies committed by {request.committedBy.profile?.organization || request.committedBy.profile?.firstName || 'a donor'}. Coordinate collection directly.</Typography>}
+      {['donor', 'admin'].includes(user.role) && request.status === 'open' && request.recipient?._id !== user._id && <Button disabled={busy} variant="outlined" sx={{ mt: 2 }} onClick={() => transition(request, 'commit')}>Commit supplies</Button>}
+      {request.recipient?._id === user._id && ['open', 'committed'].includes(request.status) && <Stack direction="row" spacing={1} sx={{ mt: 2 }}>{request.status === 'committed' && <Button disabled={busy} onClick={() => transition(request, 'filled')}>Confirm received</Button>}<Button color="error" disabled={busy} onClick={() => transition(request, 'cancelled')}>Cancel request</Button></Stack>}
+    </CardContent></Card></Grid>)}</Grid>}
+    {totalPages > 1 && <Pagination sx={{ mt: 3 }} page={page} count={totalPages} onChange={(event, value) => setPage(value)} />}
+    <Dialog open={open} onClose={() => !busy && setOpen(false)} fullWidth maxWidth="sm" aria-labelledby="request-title"><Box component="form" onSubmit={submit}><DialogTitle id="request-title">What does your community need?</DialogTitle><DialogContent>
+      {formError && <Alert severity="error">{formError}</Alert>}
+      {[
+        ['title', 'Request title', 100, true], ['description', 'Requirements and dietary needs', 500, false], ['quantity', 'Quantity, including units', 80, true], ['location', 'Collection area', 200, true]
+      ].map(([key, label, maxLength, required]) => <TextField key={key} label={label} value={form[key]} onChange={event => setForm(prev => ({ ...prev, [key]: event.target.value }))} required={required} inputProps={{ maxLength }} multiline={key === 'description'} rows={key === 'description' ? 3 : 1} margin="normal" fullWidth />)}
+      <TextField select fullWidth margin="normal" label="Food category" value={form.foodType} onChange={event => setForm(prev => ({ ...prev, foodType: event.target.value }))}>{['prepared', 'fresh', 'canned', 'frozen', 'baked', 'dairy', 'produce', 'meat', 'pantry', 'other'].map(value => <MenuItem key={value} value={value}>{value}</MenuItem>)}</TextField>
+      <TextField select fullWidth margin="normal" label="Priority" value={form.urgency} onChange={event => setForm(prev => ({ ...prev, urgency: event.target.value }))}>{['low', 'medium', 'high'].map(value => <MenuItem key={value} value={value}>{value}</MenuItem>)}</TextField>
+    </DialogContent><DialogActions><Button disabled={busy} onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" variant="contained" disabled={busy}>{busy ? 'Publishing…' : 'Publish request'}</Button></DialogActions></Box></Dialog>
+  </Box>;
+}

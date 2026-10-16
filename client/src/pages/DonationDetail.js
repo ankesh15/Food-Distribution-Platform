@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { assetUrl } from '../config';
 import { useAuth } from '../context/AuthContext';
 import {
   Typography,
@@ -29,7 +30,7 @@ import {
 const DonationDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { getDonationById, claimDonation, pickupDonation, completeDonation, user } = useAuth();
+  const { getDonationById, claimDonation, pickupDonation, completeDonation, cancelDonation, deleteDonation, user } = useAuth();
   const [donation, setDonation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -47,7 +48,8 @@ const DonationDetail = () => {
     if (data && data.donation) {
       setDonation(data.donation);
     } else {
-      setError('Donation not found');
+      setDonation(null);
+      setError(data?.error || 'Donation not found');
     }
     setLoading(false);
   };
@@ -83,10 +85,10 @@ const DonationDetail = () => {
       <Box sx={{ width: '100%' }}>
         <Skeleton variant="text" width="20%" height={32} sx={{ mb: 3 }} />
         <Grid container spacing={4}>
-          <Grid item xs={12} md={8}>
+          <Grid size={{ xs: 12, md: 8 }} >
             <Skeleton variant="rectangular" width="100%" height={350} sx={{ borderRadius: 3 }} />
           </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }} >
             <Skeleton variant="rectangular" width="100%" height={200} sx={{ borderRadius: 3, mb: 3 }} />
             <Skeleton variant="rectangular" width="100%" height={200} sx={{ borderRadius: 3 }} />
           </Grid>
@@ -99,7 +101,7 @@ const DonationDetail = () => {
     return (
       <Box sx={{ width: '100%' }}>
         <Alert severity="error" variant="outlined" sx={{ mb: 3, borderRadius: 2.5 }}>
-          Donation not found. It may have been deleted by the administrator or expired.
+          {error || 'Donation not found.'}
         </Alert>
         <Button startIcon={<BackIcon />} onClick={() => navigate('/donations')}>
           Back to Live Feed
@@ -108,8 +110,9 @@ const DonationDetail = () => {
     );
   }
 
-  const isRecipient = user && user.role === 'recipient';
-  const isClaimedByMe = donation.claimedBy?.recipient?._id === user?._id;
+  const isRecipient = user && ['recipient', 'admin'].includes(user.role);
+  const isClaimedByMe = Boolean(user && (donation.claimedBy?.recipient?._id || donation.claimedBy?.recipient) === user._id);
+  const isOwner = Boolean(user && (donation.donor?._id || donation.donor) === user._id);
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -133,12 +136,12 @@ const DonationDetail = () => {
 
       <Grid container spacing={4}>
         {/* Main Details Panel */}
-        <Grid item xs={12} md={8}>
+        <Grid size={{ xs: 12, md: 8 }} >
           <Card sx={{ border: '1px solid #e2e8f0', bgcolor: 'white', borderRadius: 3 }}>
             <CardContent sx={{ p: { xs: 3, md: 5 } }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3.5, flexWrap: 'wrap', gap: 2 }}>
                 <Box>
-                  <Typography variant="h4" sx={{ fontWeight: 800, mb: 1.5, letterSpacing: '-0.5px', lineHeight: 1.3 }}>
+                  <Typography component="h1" variant="h4" sx={{ fontWeight: 800, mb: 1.5, letterSpacing: '-0.5px', lineHeight: 1.3 }}>
                     {donation.title}
                   </Typography>
                   <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
@@ -156,6 +159,7 @@ const DonationDetail = () => {
                 </Box>
               </Box>
 
+              {donation.images?.map((image, index) => <Box key={image.url} component="img" loading="lazy" src={assetUrl(image.url)} alt={image.caption || `Food donation ${index + 1}`} sx={{ width: '100%', maxHeight: 340, objectFit: 'cover', borderRadius: 2, mb: 2 }} />)}
               <Typography variant="body1" sx={{ mb: 4, lineHeight: 1.8, fontSize: '0.95rem', color: 'text.primary' }}>
                 {donation.description}
               </Typography>
@@ -164,7 +168,7 @@ const DonationDetail = () => {
 
               {/* Specific Food details */}
               <Grid container spacing={3.5}>
-                <Grid item xs={6} sm={6}>
+                <Grid size={{ xs: 6, sm: 6 }} >
                   <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Available Quantity
                   </Typography>
@@ -173,7 +177,7 @@ const DonationDetail = () => {
                   </Typography>
                 </Grid>
 
-                <Grid item xs={6} sm={6}>
+                <Grid size={{ xs: 6, sm: 6 }} >
                   <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Preparation Time
                   </Typography>
@@ -182,7 +186,7 @@ const DonationDetail = () => {
                   </Typography>
                 </Grid>
 
-                <Grid item xs={6} sm={6}>
+                <Grid size={{ xs: 6, sm: 6 }} >
                   <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Expiry Limit
                   </Typography>
@@ -198,7 +202,7 @@ const DonationDetail = () => {
                   </Typography>
                 </Grid>
 
-                <Grid item xs={6} sm={6}>
+                <Grid size={{ xs: 6, sm: 6 }} >
                   <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Food Class
                   </Typography>
@@ -208,7 +212,7 @@ const DonationDetail = () => {
                 </Grid>
 
                 {donation.allergens && donation.allergens.length > 0 && (
-                  <Grid item xs={12}>
+                  <Grid size={{ xs: 12 }} >
                     <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', mb: 1 }}>
                       Allergen Warnings
                     </Typography>
@@ -221,7 +225,7 @@ const DonationDetail = () => {
                 )}
 
                 {donation.specialInstructions && (
-                  <Grid item xs={12}>
+                  <Grid size={{ xs: 12 }} >
                     <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', mb: 0.5 }}>
                       Handling Instructions
                     </Typography>
@@ -232,7 +236,7 @@ const DonationDetail = () => {
                 )}
 
                 {donation.tags && donation.tags.length > 0 && (
-                  <Grid item xs={12}>
+                  <Grid size={{ xs: 12 }} >
                     <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', mb: 1 }}>
                       Keywords
                     </Typography>
@@ -249,7 +253,7 @@ const DonationDetail = () => {
         </Grid>
 
         {/* Sidebar Logistics */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }} >
           <Stack spacing={3}>
             
             {/* 1. Pickup Window */}
@@ -282,7 +286,7 @@ const DonationDetail = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                   <LocationIcon sx={{ color: '#10b981', fontSize: 20 }} />
                   <Typography variant="subtitle1" sx={{ fontWeight: 800, letterSpacing: '-0.3px' }}>
-                    Location Coordinates
+                    Pickup location
                   </Typography>
                 </Box>
                 <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>
@@ -311,12 +315,13 @@ const DonationDetail = () => {
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                     <PersonIcon sx={{ color: '#64748b', fontSize: 20 }} />
                     <Typography variant="subtitle1" sx={{ fontWeight: 800, letterSpacing: '-0.3px' }}>
-                      Vetted Donor
+                      Donor
                     </Typography>
                   </Box>
                   <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>
                     {donation.donor.profile?.firstName} {donation.donor.profile?.lastName}
                   </Typography>
+                  {donation.donor.profile?.phone && <Typography sx={{ mt: 1 }}><a href={`tel:${donation.donor.profile.phone}`}>{donation.donor.profile.phone}</a></Typography>}
                   {donation.donor.profile?.organization && (
                     <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.2 }}>
                       {donation.donor.profile.organization}
@@ -339,6 +344,7 @@ const DonationDetail = () => {
                   <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>
                     {donation.claimedBy.recipient.profile?.firstName} {donation.claimedBy.recipient.profile?.lastName}
                   </Typography>
+                  {donation.claimedBy.recipient.profile?.phone && <Typography sx={{ mt: 1 }}><a href={`tel:${donation.claimedBy.recipient.profile.phone}`}>{donation.claimedBy.recipient.profile.phone}</a></Typography>}
                   {donation.claimedBy.recipient.profile?.organization && (
                     <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.2 }}>
                       {donation.claimedBy.recipient.profile.organization}
@@ -347,19 +353,36 @@ const DonationDetail = () => {
                   <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block', mt: 1.5 }}>
                     Claimed: {new Date(donation.claimedBy.claimedAt).toLocaleString()}
                   </Typography>
+                  {donation.claimedBy.pickupTime && <Typography variant="caption" display="block">Picked up: {new Date(donation.claimedBy.pickupTime).toLocaleString()}</Typography>}
+                  {donation.claimedBy.completedAt && <Typography variant="caption" display="block">Completed: {new Date(donation.claimedBy.completedAt).toLocaleString()}</Typography>}
                 </CardContent>
               </Card>
             )}
 
-            {/* 5. Control buttons actions */}
-            {user && (
+            {/* 5. Control buttons actions (BUG-13) */}
+            {((!user && donation.status === 'available') || (isOwner && ['available', 'claimed', 'expired', 'cancelled'].includes(donation.status)) || (isRecipient && !isOwner && donation.status === 'available') || (isClaimedByMe && ['claimed', 'picked-up'].includes(donation.status))) && (
               <Card sx={{ border: '1px solid #e2e8f0', bgcolor: 'white', borderRadius: 3 }}>
                 <CardContent sx={{ p: 3 }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2, letterSpacing: '-0.3px' }}>
-                    Logs Actions
+                    Actions
                   </Typography>
                   <Stack spacing={1.5}>
-                    {isRecipient && donation.status === 'available' && (
+                    {isOwner && donation.status === 'available' && <Button onClick={() => navigate(`/donations/${id}/edit`)}>Edit donation</Button>}
+                    {isOwner && ['available', 'claimed'].includes(donation.status) && <Button color="error" disabled={actionLoading} onClick={() => { if (window.confirm('Cancel this donation? The recipient will be notified.')) handleAction('cancelled', cancelDonation); }}>Cancel donation</Button>}
+                    {isOwner && ['available', 'cancelled', 'expired'].includes(donation.status) && <Button color="error" disabled={actionLoading} onClick={async () => { if (!window.confirm('Delete this listing?')) return; setActionLoading(true); const result = await deleteDonation(id); if (result.success) navigate('/dashboard'); else setError(result.error); setActionLoading(false); }}>Delete listing</Button>}
+                    {isClaimedByMe && donation.status === 'claimed' && <Typography variant="body2" color="text.secondary">Confirm pickup during the scheduled window. Contact your donor if arrangements change.</Typography>}
+                    {!user && donation.status === 'available' && (
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        fullWidth
+                        onClick={() => navigate('/login', { state: { from: { pathname: `/donations/${id}` } } })}
+                        sx={{ py: 1.2, fontWeight: 700 }}
+                      >
+                        Login to Claim
+                      </Button>
+                    )}
+                    {user && isRecipient && !isOwner && donation.status === 'available' && (
                       <Button
                         variant="contained"
                         color="primary"
@@ -372,20 +395,20 @@ const DonationDetail = () => {
                         {actionLoading ? 'Processing...' : 'Claim Listing'}
                       </Button>
                     )}
-                    {isRecipient && isClaimedByMe && donation.status === 'claimed' && (
+                    {user && isRecipient && isClaimedByMe && donation.status === 'claimed' && (
                       <Button
                         variant="contained"
                         color="info"
                         fullWidth
                         startIcon={<PickupIcon />}
                         onClick={() => handleAction('picked up', pickupDonation)}
-                        disabled={actionLoading}
+                        disabled={actionLoading || new Date(donation.pickupWindow.startTime) > new Date() || new Date(donation.pickupWindow.endTime) < new Date() || new Date(donation.expiryDate) <= new Date()}
                         sx={{ py: 1.2, fontWeight: 700 }}
                       >
                         {actionLoading ? 'Processing...' : 'Mark Picked Up'}
                       </Button>
                     )}
-                    {isRecipient && isClaimedByMe && donation.status === 'picked-up' && (
+                    {user && isRecipient && isClaimedByMe && donation.status === 'picked-up' && (
                       <Button
                         variant="contained"
                         color="success"
@@ -396,16 +419,6 @@ const DonationDetail = () => {
                         sx={{ py: 1.2, fontWeight: 700 }}
                       >
                         {actionLoading ? 'Processing...' : 'Mark Completed'}
-                      </Button>
-                    )}
-                    {!user && donation.status === 'available' && (
-                      <Button
-                        variant="outlined"
-                        fullWidth
-                        onClick={() => navigate('/login')}
-                        sx={{ py: 1.2, fontWeight: 700 }}
-                      >
-                        Login to Claim
                       </Button>
                     )}
                   </Stack>

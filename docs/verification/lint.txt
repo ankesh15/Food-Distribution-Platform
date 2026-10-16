@@ -1,0 +1,8 @@
+
+> food-distribution-platform@1.0.0 lint
+> npm run lint --prefix client
+
+
+> client@0.1.0 lint
+> eslint src --max-warnings=0
+

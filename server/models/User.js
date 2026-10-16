@@ -80,11 +80,13 @@ const userSchema = new mongoose.Schema({
   lastLogin: {
     type: Date
   },
+  tokenVersion: { type: Number, default: 0 },
   refreshToken: {
     type: String
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  optimisticConcurrency: true
 });
 
 // Index for geospatial queries
@@ -116,6 +118,7 @@ userSchema.methods.getPublicProfile = function() {
   const userObject = this.toObject();
   delete userObject.password;
   delete userObject.refreshToken;
+  delete userObject.tokenVersion;
   return userObject;
 };
 

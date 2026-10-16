@@ -1,100 +1,34 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import {
-  Award,
-  Globe,
-  Leaf,
-  Users,
-} from 'lucide-react';
-
-const Analytics = () => {
-  const stats = [
-    { label: 'CO2 Emission Saved', value: '4,280 kg', change: '+12.4%', trend: 'up', icon: <Leaf className="text-emerald-500" /> },
-    { label: 'Methane Mitigated', value: '310 kg', change: '+8.2%', trend: 'up', icon: <Globe className="text-blue-500" /> },
-    { label: 'Meals Distributed', value: '18,500', change: '+24.1%', trend: 'up', icon: <Users className="text-emerald-500" /> },
-    { label: 'Food Waste Avoided', value: '8.4 tons', change: '+15.7%', trend: 'up', icon: <Award className="text-amber-500" /> }
-  ];
-
-  return (
-    <div className="space-y-6">
-      {/* Title */}
-      <div>
-        <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">
-          Impact Analytics
-        </h2>
-        <p className="text-xs text-slate-500 mt-1">
-          Monitor carbon offset, landfill reduction index, and community food support stats.
-        </p>
-      </div>
-
-      {/* Highlights Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {stats.map((stat, idx) => (
-          <motion.div
-            key={idx}
-            whileHover={{ y: -4 }}
-            className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col gap-3"
-          >
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-semibold text-slate-500">{stat.label}</span>
-              <div className="p-2.5 rounded-lg bg-slate-55 bg-slate-50 border border-slate-100">{stat.icon}</div>
-            </div>
-            <div>
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                {stat.value}
-              </h3>
-              <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5 mt-1">
-                {stat.change} vs last month
-              </span>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Interactive visual graphics */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Environmental Index Card */}
-        <div className="p-6 bg-white border border-slate-200 rounded-2xl shadow-sm space-y-4">
-          <h3 className="font-extrabold text-sm text-slate-900">Landfill Diversion Rate</h3>
-          
-          <div className="h-48 flex items-end justify-between gap-2 pt-6">
-            {[30, 45, 60, 50, 75, 90, 85].map((val, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                <div
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 rounded-t-lg transition-all duration-500"
-                  style={{ height: `${val * 1.5}px` }}
-                ></div>
-                <span className="text-[10px] font-bold text-slate-400">W{i + 1}</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-[11px] text-slate-500 leading-relaxed pt-2 border-t border-slate-100">
-            Landfill waste diversion represents organic products salvaged from supermarkets that would otherwise contribute to landfill greenhouse decay.
-          </p>
-        </div>
-
-        {/* Community distribution breakdown */}
-        <div className="p-6 bg-white border border-slate-200 rounded-2xl shadow-sm space-y-4">
-          <h3 className="font-extrabold text-sm text-slate-900">Weekly Meal distribution Index</h3>
-          
-          <div className="h-48 flex items-end justify-between gap-2 pt-6">
-            {[40, 55, 30, 70, 80, 65, 95].map((val, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                <div
-                  className="w-full bg-blue-500 hover:bg-blue-600 rounded-t-lg transition-all duration-500"
-                  style={{ height: `${val * 1.5}px` }}
-                ></div>
-                <span className="text-[10px] font-bold text-slate-400">W{i + 1}</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-[11px] text-slate-500 leading-relaxed pt-2 border-t border-slate-100">
-            Assesses distribution frequencies synced through our recipient centers. Weekly peaks align with donor surplus catalog updates.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default Analytics;
+import React, { useCallback, useEffect, useState } from 'react';
+import { Box, Button, Card, CardContent, Grid, Typography, Stack } from '@mui/material';
+import { useAuth, apiError } from '../context/AuthContext';
+import PageFeedback from '../components/PageFeedback';
+export default function Analytics() {
+  const { api } = useAuth();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { const response = await api.get('/users/summary'); setData(response.data); setError(''); }
+    catch (err) { setError(apiError(err)); } finally { setLoading(false); }
+  }, [api]);
+  useEffect(() => { load(); }, [load]);
+  const total = Object.values(data?.states || {}).reduce((sum, value) => sum + value, 0);
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const now = new Date(); const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5 + i, 1));
+    const id = date.toISOString().slice(0, 7);
+    return { _id: id, label: date.toLocaleDateString(undefined, { month: 'short', year: 'numeric', timeZone: 'UTC' }), count: 0, completed: 0, ...data?.monthly.find(row => row._id === id) };
+  });
+  const max = Math.max(1, ...months.map(month => month.count));
+  return <Box>
+    <Stack direction="row" justifyContent="space-between" sx={{ mb: 3 }}><Box><Typography component="h1" variant="h2">Impact you can measure</Typography><Typography color="text.secondary" sx={{ mt: 1 }}>Donation history for {data?.scope || 'your account'}, calculated from stored records.</Typography></Box><Button onClick={load}>Refresh</Button></Stack>
+    <PageFeedback loading={loading} error={error} onRetry={load} />
+    {data && !error && !loading && <>
+      <Grid container spacing={2} sx={{ mb: 3 }}>{[['Total donations', total], ['Completed', data.states.completed || 0], ['Completion rate', `${total ? Math.round((data.states.completed || 0) / total * 100) : 0}%`]].map(([title, value]) => <Grid key={title} size={{ xs: 12, sm: 4 }}><Card><CardContent><Typography color="text.secondary">{title}</Typography><Typography variant="h2" sx={{ mt: 1 }}>{value}</Typography></CardContent></Card></Grid>)}</Grid>
+      <Card sx={{ mb: 3 }}><CardContent sx={{ p: 3 }}><Typography component="h2" variant="h3" sx={{ mb: 1 }}>Six months of sharing</Typography><Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>Listings created each month (UTC). Completed counts refer to those listings.</Typography>
+        {months.map(month => <Box key={month._id} sx={{ mb: 2 }}><Stack direction="row" justifyContent="space-between"><Typography variant="body2">{month.label}</Typography><Typography variant="body2">{month.count} listed · {month.completed} completed</Typography></Stack><Box role="img" aria-label={`${month.label}: ${month.count} listings, ${month.completed} completed`} sx={{ mt: 1, height: 12, borderRadius: 2, bgcolor: '#f1f5f9' }}><Box sx={{ height: '100%', borderRadius: 2, width: `${month.count / max * 100}%`, bgcolor: '#047857' }} /></Box></Box>)}
+      </CardContent></Card>
+      <Card><CardContent sx={{ p: 3 }}><Typography component="h2" variant="h3" sx={{ mb: 2 }}>Food successfully redistributed</Typography>{data.quantities.length ? <Stack direction="row" useFlexGap flexWrap="wrap" spacing={3}>{data.quantities.map(q => <Box key={q._id}><Typography variant="h2">{Number(q.amount.toFixed(2)).toLocaleString()}</Typography><Typography color="text.secondary">{q._id}</Typography></Box>)}</Stack> : <Typography color="text.secondary">Completed donations will appear here.</Typography>}<Typography variant="body2" color="text.secondary" sx={{ mt: 3 }}>Quantities remain in their original units. Environmental savings and meal equivalents require measured weights and are not inferred from listing counts.</Typography></CardContent></Card>
+    </>}
+  </Box>;
+}

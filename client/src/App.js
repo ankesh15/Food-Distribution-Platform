@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { Box, CircularProgress } from '@mui/material';
@@ -22,6 +22,7 @@ import Requests from './pages/Requests';
 import Volunteers from './pages/Volunteers';
 import Analytics from './pages/Analytics';
 import MapPage from './pages/MapPage';
+import Notifications from './pages/Notifications';
 
 // Context
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -32,9 +33,9 @@ import { TrackingProvider } from './context/TrackingContext';
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#10b981', // Emerald Green
+      main: '#047857', // Emerald Green
       light: '#34d399',
-      dark: '#059669',
+      dark: '#065f46',
       contrastText: '#ffffff',
     },
     secondary: {
@@ -118,7 +119,7 @@ const theme = createTheme({
           },
         },
         containedPrimary: {
-          background: 'linear-gradient(180deg, #10b981 0%, #059669 100%)',
+          background: 'linear-gradient(180deg, #047857 0%, #065f46 100%)',
           border: '1px solid #047857',
           color: '#ffffff',
           '&:hover': {
@@ -159,6 +160,7 @@ const theme = createTheme({
 // A wrapper that handles conditional layout based on auth status
 const LayoutWrapper = ({ children, isPublicOnly }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -169,7 +171,7 @@ const LayoutWrapper = ({ children, isPublicOnly }) => {
   }
 
   if (user && isPublicOnly) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={location.state?.from?.pathname || '/dashboard'} replace />;
   }
 
   if (user) {
@@ -179,7 +181,7 @@ const LayoutWrapper = ({ children, isPublicOnly }) => {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#f8fafc' }}>
       <Navbar />
-      <Box sx={{ flex: 1 }} className="mesh-bg animate-fade-in">
+      <Box component="main" id="main-content" sx={{ flex: 1 }} className="mesh-bg animate-fade-in">
         {children}
       </Box>
       <Footer />
@@ -190,7 +192,7 @@ const LayoutWrapper = ({ children, isPublicOnly }) => {
 function App() {
   return (
     <ThemeProvider theme={theme}>
-      <CssBaseline />
+      <CssBaseline /><a className="skip-link" href="#main-content">Skip to content</a>
       <AuthProvider>
         <NotificationProvider>
           <TrackingProvider>
@@ -205,6 +207,9 @@ function App() {
                 <Route path="/donations" element={<LayoutWrapper><Donations /></LayoutWrapper>} />
                 <Route path="/donations/:id" element={<LayoutWrapper><DonationDetail /></LayoutWrapper>} />
 
+                <Route path="/donations/:id/edit" element={<ProtectedRoute roles={['donor', 'admin']}><DashboardLayout><CreateDonation /></DashboardLayout></ProtectedRoute>} />
+                <Route path="/notifications" element={<ProtectedRoute><DashboardLayout><Notifications /></DashboardLayout></ProtectedRoute>} />
+                <Route path="*" element={<LayoutWrapper><Box sx={{ p: 6, textAlign: 'center' }}><h1>Page not found</h1><p>This page may have moved. <a href="/donations">Browse available food</a>.</p></Box></LayoutWrapper>} />
                 {/* Protected Portal Routes */}
                 <Route
                   path="/dashboard"

@@ -1,0 +1,4 @@
+
+> food-distribution-platform@1.0.0 check:server
+> find server scripts -name "*.js" -not -path "*/uploads/*" -exec node --check {} +
+

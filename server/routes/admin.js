@@ -2,11 +2,16 @@ const express = require('express');
 const User = require('../models/User');
 const Donation = require('../models/Donation');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { sendPickupReminder } = require('../services/emailService');
+const { sendPickupReminderSMS } = require('../services/smsService');
 
+const { listValidation, applyStatus, escapeRegex, validId } = require('../middleware/validation');
 const router = express.Router();
 
 // Apply admin middleware to all routes
 router.use(authenticateToken, requireAdmin);
+
+router.param('id', validId);
 
 // Get platform statistics
 router.get('/stats', async (req, res) => {
@@ -19,16 +24,18 @@ router.get('/stats', async (req, res) => {
       totalDonors,
       totalRecipients,
       recentDonations,
-      recentUsers
+      recentUsers,
+      activeUsers
     ] = await Promise.all([
       User.countDocuments(),
       Donation.countDocuments(),
-      Donation.countDocuments({ status: 'available' }),
+      Donation.countDocuments({ status: 'available', expiryDate: { $gt: new Date() }, 'pickupWindow.endTime': { $gt: new Date() } }),
       Donation.countDocuments({ status: 'completed' }),
       User.countDocuments({ role: 'donor' }),
       User.countDocuments({ role: 'recipient' }),
       Donation.find().sort({ createdAt: -1 }).limit(5).populate('donor', 'profile.firstName profile.lastName'),
-      User.find().sort({ createdAt: -1 }).limit(5).select('profile.firstName profile.lastName role createdAt')
+      User.find().sort({ createdAt: -1 }).limit(5).select('profile.firstName profile.lastName role createdAt'),
+      User.countDocuments({ isActive: true })
     ]);
 
     // Calculate completion rate
@@ -66,6 +73,7 @@ router.get('/stats', async (req, res) => {
     res.json({
       overview: {
         totalUsers,
+        activeUsers,
         totalDonations,
         activeDonations,
         completedDonations,
@@ -87,7 +95,7 @@ router.get('/stats', async (req, res) => {
 });
 
 // Get all users with pagination and filters
-router.get('/users', async (req, res) => {
+router.get('/users', listValidation, async (req, res) => {
   try {
     const { page = 1, limit = 20, role, isActive, search } = req.query;
 
@@ -98,10 +106,10 @@ router.get('/users', async (req, res) => {
 
     if (search) {
       query.$or = [
-        { 'profile.firstName': { $regex: search, $options: 'i' } },
-        { 'profile.lastName': { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { 'profile.organization': { $regex: search, $options: 'i' } }
+        { 'profile.firstName': { $regex: escapeRegex(search), $options: 'i' } },
+        { 'profile.lastName': { $regex: escapeRegex(search), $options: 'i' } },
+        { email: { $regex: escapeRegex(search), $options: 'i' } },
+        { 'profile.organization': { $regex: escapeRegex(search), $options: 'i' } }
       ];
     }
 
@@ -166,9 +174,12 @@ router.patch('/users/:id/status', async (req, res) => {
       return res.status(400).json({ message: 'isActive must be a boolean' });
     }
 
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { isActive },
+    const target = await User.findById(req.params.id);
+    if (!target) return res.status(404).json({ message: 'User not found' });
+    if (target.role === 'admin') return res.status(403).json({ message: 'Administrator accounts require operator management' });
+    const user = await User.findOneAndUpdate(
+      { _id: req.params.id, role: { $ne: 'admin' } },
+      { $set: { isActive, refreshToken: null }, $inc: { tokenVersion: 1 } },
       { new: true }
     ).select('-password -refreshToken');
 
@@ -176,6 +187,7 @@ router.patch('/users/:id/status', async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
+    req.app.get('io')?.in(`user-${user._id}`).disconnectSockets(true);
     res.json({
       message: `User ${isActive ? 'activated' : 'deactivated'} successfully`,
       user
@@ -188,7 +200,7 @@ router.patch('/users/:id/status', async (req, res) => {
 });
 
 // Get all donations with admin filters
-router.get('/donations', async (req, res) => {
+router.get('/donations', listValidation, async (req, res) => {
   try {
     const { 
       page = 1, 
@@ -205,7 +217,7 @@ router.get('/donations', async (req, res) => {
 
     const query = {};
 
-    if (status) query.status = status;
+    applyStatus(query, status);
     if (foodType) query.foodType = foodType;
     if (donor) query.donor = donor;
     if (recipient) query['claimedBy.recipient'] = recipient;
@@ -270,6 +282,7 @@ router.delete('/donations/:id', async (req, res) => {
     }
 
     await Donation.findByIdAndDelete(req.params.id);
+    await require('../services/notificationService').notify(req, [donation.donor, donation.claimedBy?.recipient], 'Listing removed', `“${donation.title}” was removed by an administrator.`);
 
     res.json({ message: 'Donation deleted successfully' });
 
@@ -279,34 +292,10 @@ router.delete('/donations/:id', async (req, res) => {
   }
 });
 
-// Send reminder emails to inactive users
-router.post('/reminders/inactive-users', async (req, res) => {
-  try {
-    const { daysInactive = 30 } = req.body;
+// Do not report sends for a notification campaign that is not implemented.
+router.post('/reminders/inactive-users', (req, res) => res.status(501).json({ message: 'Inactive-user email campaigns are not configured' }));
 
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - daysInactive);
-
-    const inactiveUsers = await User.find({
-      lastLogin: { $lt: cutoffDate },
-      isActive: true,
-      'preferences.emailNotifications': true
-    });
-
-    console.log(`Found ${inactiveUsers.length} inactive users to remind`);
-
-    res.json({
-      message: `Reminder emails queued for ${inactiveUsers.length} inactive users`,
-      count: inactiveUsers.length
-    });
-
-  } catch (error) {
-    console.error('Send reminders error:', error);
-    res.status(500).json({ message: 'Failed to send reminders' });
-  }
-});
-
-// Send pickup reminders
+// Send pickup reminders (BUG-12)
 router.post('/reminders/pickup', async (req, res) => {
   try {
     const today = new Date();
@@ -319,13 +308,31 @@ router.post('/reminders/pickup', async (req, res) => {
         $gte: today,
         $lte: tomorrow
       }
-    }).populate('claimedBy.recipient', 'email profile.firstName profile.lastName');
+    }).populate('claimedBy.recipient', 'email profile preferences');
 
-    console.log(`Found ${donationsNeedingReminders.length} donations needing pickup reminders`);
+    let dispatched = 0;
+    for (const donation of donationsNeedingReminders) {
+      if (donation.claimedBy?.recipient) {
+        const recipient = donation.claimedBy.recipient;
+        try {
+          if (recipient.preferences?.emailNotifications !== false) {
+            const sent = await sendPickupReminder(donation, recipient);
+            if (sent) dispatched++;
+          }
+          if (recipient.preferences?.smsNotifications && recipient.profile?.phone) {
+            await sendPickupReminderSMS(recipient, donation);
+          }
+        } catch (err) {
+          console.error(`Failed to send reminder for donation ${donation._id}:`, err.message);
+        }
+      }
+    }
+
+    console.log(`Dispatched pickup reminders for ${dispatched} donations`);
 
     res.json({
-      message: `Pickup reminders queued for ${donationsNeedingReminders.length} donations`,
-      count: donationsNeedingReminders.length
+      message: `Pickup reminders sent for ${dispatched} donations`,
+      count: dispatched
     });
 
   } catch (error) {

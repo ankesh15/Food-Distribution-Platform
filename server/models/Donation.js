@@ -27,7 +27,7 @@ const donationSchema = new mongoose.Schema({
     amount: {
       type: Number,
       required: true,
-      min: 1
+      min: 0.1
     },
     unit: {
       type: String,
@@ -150,7 +150,8 @@ const donationSchema = new mongoose.Schema({
     }
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  optimisticConcurrency: true
 });
 
 // Index for geospatial queries
@@ -159,7 +160,9 @@ donationSchema.index({ "location.coordinates": "2dsphere" });
 // Index for status and date queries
 donationSchema.index({ status: 1, "pickupWindow.startTime": 1 });
 donationSchema.index({ donor: 1, status: 1 });
-donationSchema.index({ "claimedBy.recipient": 1 });
+donationSchema.index({ "claimedBy.recipient": 1, "claimedBy.claimedAt": -1 });
+donationSchema.index({ status: 1, expiryDate: 1, createdAt: -1 });
+donationSchema.index({ donor: 1, createdAt: -1 });
 
 // Text index for search by title and description
 donationSchema.index({ title: "text", description: "text" });
@@ -195,6 +198,19 @@ donationSchema.methods.getPickupWindowStatus = function() {
   }
 };
 
+// Cross-field rules also protect non-HTTP writes and complete-document validation before atomic edits.
+donationSchema.pre('validate', function(next) {
+  const start = this.pickupWindow?.startTime;
+  const end = this.pickupWindow?.endTime;
+  if (this.preparationDate && this.expiryDate && this.preparationDate >= this.expiryDate) this.invalidate('expiryDate', 'Expiry must follow preparation');
+  if (start && end && start >= end) this.invalidate('pickupWindow.endTime', 'Pickup end must follow pickup start');
+  if (start && this.preparationDate && start < this.preparationDate) this.invalidate('pickupWindow.startTime', 'Pickup cannot precede preparation');
+  if (end && this.expiryDate && end > this.expiryDate) this.invalidate('pickupWindow.endTime', 'Pickup must end before expiry');
+  const coords = this.location?.coordinates?.coordinates;
+  if (coords && (coords.length !== 2 || !coords.every(Number.isFinite) || Math.abs(coords[0]) > 180 || Math.abs(coords[1]) > 90)) this.invalidate('location.coordinates', 'Invalid coordinates');
+  next();
+});
+
 // Pre-save middleware to update status based on dates
 donationSchema.pre('save', function(next) {
   if (this.isExpired() && this.status === 'available') {
@@ -204,6 +220,9 @@ donationSchema.pre('save', function(next) {
 });
 
 // Ensure virtual fields are serialized
-donationSchema.set('toJSON', { virtuals: true });
+donationSchema.set('toJSON', { virtuals: true, transform(doc, value) {
+  if (value.status === 'available' && (value.expiryDate <= new Date() || value.pickupWindow.endTime <= new Date())) value.status = 'expired';
+  return value;
+} });
 
 module.exports = mongoose.model('Donation', donationSchema);

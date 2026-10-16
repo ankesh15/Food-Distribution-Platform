@@ -28,15 +28,16 @@ import {
   Warning as UrgentIcon,
   ArrowForward as ArrowIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 
 const Donations = () => {
   const { getDonations, user, claimDonation } = useAuth();
   const [donations, setDonations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [urlParams] = useSearchParams();
+  const [search, setSearch] = useState(urlParams.get('search') || '');
   const [foodTypeFilter, setFoodTypeFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('available');
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -53,6 +54,7 @@ const Donations = () => {
     if (statusFilter) filters.status = statusFilter;
 
     const data = await getDonations(filters);
+    if (data.error) setError(data.error);
     setDonations(data.donations || []);
     setTotalPages(data.totalPages || 1);
     setTotal(data.total || 0);
@@ -60,8 +62,10 @@ const Donations = () => {
   }, [getDonations, page, search, foodTypeFilter, statusFilter]);
 
   useEffect(() => {
-    fetchDonations();
+    const timer = setTimeout(fetchDonations, 300);
+    return () => clearTimeout(timer);
   }, [fetchDonations]);
+  useEffect(() => { setSearch(urlParams.get('search') || ''); setPage(1); }, [urlParams]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -100,11 +104,11 @@ const Donations = () => {
     <Box sx={{ width: '100%' }}>
       {/* Title Header */}
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ fontWeight: 800, mb: 1, letterSpacing: '-0.5px' }}>
+        <Typography component="h1" variant="h4" sx={{ fontWeight: 800, mb: 1, letterSpacing: '-0.5px' }}>
           Browse Live Food Feed
         </Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.9rem' }}>
-          {total} donation listing{total !== 1 ? 's' : ''} currently active
+          {total} donation listing{total !== 1 ? 's' : ''} matching your filters
         </Typography>
       </Box>
 
@@ -113,7 +117,8 @@ const Donations = () => {
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center">
           <Box component="form" onSubmit={handleSearchSubmit} sx={{ flex: 1, display: 'flex', gap: 1.5, width: '100%' }}>
             <TextField
-              placeholder="Search keyword, city, bakery name..."
+              label="Search food or city"
+              placeholder="Search food or city…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               InputProps={{
@@ -132,8 +137,8 @@ const Donations = () => {
           </Box>
           <Stack direction="row" spacing={2} sx={{ width: { xs: '100%', md: 'auto' } }}>
             <FormControl size="small" sx={{ minWidth: 150, flexGrow: 1 }}>
-              <InputLabel>Category</InputLabel>
-              <Select
+              <InputLabel id="label-category">Category</InputLabel>
+              <Select labelId="label-category"
                 value={foodTypeFilter}
                 onChange={(e) => { setFoodTypeFilter(e.target.value); setPage(1); }}
                 label="Category"
@@ -148,8 +153,8 @@ const Donations = () => {
               </Select>
             </FormControl>
             <FormControl size="small" sx={{ minWidth: 130, flexGrow: 1 }}>
-              <InputLabel>Status</InputLabel>
-              <Select
+              <InputLabel id="label-status">Status</InputLabel>
+              <Select labelId="label-status"
                 value={statusFilter}
                 onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
                 label="Status"
@@ -176,7 +181,7 @@ const Donations = () => {
       {loading ? (
         <Grid container spacing={3}>
           {[1, 2, 3, 4, 5, 6].map((i) => (
-            <Grid item xs={12} sm={6} md={4} key={i}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={i}>
               <Card sx={{ border: '1px solid #e2e8f0', p: 1 }}>
                 <CardContent sx={{ p: 2.5 }}>
                   <Skeleton variant="text" width="80%" height={28} sx={{ mb: 1.5 }} />
@@ -209,7 +214,7 @@ const Donations = () => {
         <>
           <Grid container spacing={3}>
             {donations.map((donation) => (
-              <Grid item xs={12} sm={6} md={4} key={donation._id}>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} key={donation._id}>
                 <Card 
                   className="glass-card-hover"
                   sx={{

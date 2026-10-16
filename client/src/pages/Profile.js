@@ -107,39 +107,42 @@ const Profile = () => {
     setLoading(true);
 
     try {
-      if (formData.password.new || formData.password.current) {
-        if (!formData.password.current) {
-          setError('Current password is required to change password');
-          setLoading(false);
-          return;
-        }
-        if (formData.password.new !== formData.password.confirm) {
-          setError('New passwords do not match');
-          setLoading(false);
-          return;
-        }
-        if (formData.password.new.length < 6) {
-          setError('New password must be at least 6 characters long');
-          setLoading(false);
-          return;
-        }
-
-        const passwordResult = await changePassword(formData.password.current, formData.password.new);
-        if (!passwordResult.success) {
-          setError(passwordResult.error);
-          setLoading(false);
-          return;
-        }
-      }
-
       const updateData = {
         profile: formData.profile,
         preferences: formData.preferences,
       };
 
       const result = await updateProfile(updateData);
-      
+
       if (result.success) {
+        if (formData.password.new || formData.password.current) {
+          if (!formData.password.current) {
+            setError('Current password is required to change password');
+            setLoading(false);
+            return;
+          }
+          if (formData.password.new !== formData.password.confirm) {
+            setError('New passwords do not match');
+            setLoading(false);
+            return;
+          }
+          if (formData.password.new.length < 8) {
+            setError('New password must be at least 8 characters long');
+            setLoading(false);
+            return;
+          }
+
+          const passwordResult = await changePassword(formData.password.current, formData.password.new);
+          if (!passwordResult.success) {
+            setError(passwordResult.error);
+            setLoading(false);
+            return;
+          }
+        }
+
+        if (formData.password.new) {
+          await logout(true); navigate('/login', { replace: true }); return;
+        }
         setSuccess('Profile updated successfully!');
         setIsEditing(false);
         setFormData(prev => ({
@@ -224,7 +227,7 @@ const Profile = () => {
 
       <Grid container spacing={4}>
         {/* Profile Details (Left Side) */}
-        <Grid item xs={12} lg={8}>
+        <Grid size={{ xs: 12, lg: 8 }} >
           <Card sx={{ border: '1px solid #e2e8f0', bgcolor: 'white', borderRadius: 3, mb: 4 }}>
             <CardContent sx={{ p: { xs: 3, md: 4 } }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -260,7 +263,7 @@ const Profile = () => {
 
               <form onSubmit={handleSubmit}>
                 <Grid container spacing={3}>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }} >
                     <TextField
                       fullWidth
                       label="First Name"
@@ -271,7 +274,7 @@ const Profile = () => {
                     />
                   </Grid>
 
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }} >
                     <TextField
                       fullWidth
                       label="Last Name"
@@ -282,7 +285,7 @@ const Profile = () => {
                     />
                   </Grid>
 
-                  <Grid item xs={12}>
+                  <Grid size={{ xs: 12 }} >
                     <TextField
                       fullWidth
                       label="Email Address"
@@ -295,7 +298,7 @@ const Profile = () => {
                     />
                   </Grid>
 
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }} >
                     <TextField
                       fullWidth
                       label="Phone Number"
@@ -308,7 +311,7 @@ const Profile = () => {
                     />
                   </Grid>
 
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }} >
                     <TextField
                       fullWidth
                       label="Organization"
@@ -321,7 +324,7 @@ const Profile = () => {
                     />
                   </Grid>
 
-                  <Grid item xs={12}>
+                  <Grid size={{ xs: 12 }} >
                     <TextField
                       fullWidth
                       label="Address"
@@ -336,7 +339,7 @@ const Profile = () => {
                     />
                   </Grid>
 
-                  <Grid item xs={12}>
+                  <Grid size={{ xs: 12 }} >
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 1 }}>
                       <Chip
                         label={user.role.toUpperCase()}
@@ -345,7 +348,7 @@ const Profile = () => {
                         sx={{ fontWeight: 800, fontSize: '0.65rem', height: 22 }}
                       />
                       <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500 }}>
-                        Vetted account role access
+                        Your account role
                       </Typography>
                     </Box>
                   </Grid>
@@ -367,7 +370,7 @@ const Profile = () => {
               </Box>
 
               <Grid container spacing={3}>
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }} >
                   <TextField
                     fullWidth
                     label="Current Password"
@@ -379,6 +382,7 @@ const Profile = () => {
                     InputProps={{
                       endAdornment: (
                         <IconButton
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
                           onClick={() => setShowPassword(!showPassword)}
                           edge="end"
                           sx={{ color: '#94a3b8' }}
@@ -390,7 +394,7 @@ const Profile = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <TextField
                     fullWidth
                     label="New Password"
@@ -398,12 +402,12 @@ const Profile = () => {
                     value={formData.password.new}
                     onChange={(e) => handleInputChange('password', 'new', e.target.value)}
                     disabled={!isEditing}
-                    placeholder="Min 6 characters"
-                    helperText="Minimum 6 characters"
+                    placeholder="Min 8 characters"
+                    helperText="Minimum 8 characters"
                   />
                 </Grid>
 
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <TextField
                     fullWidth
                     label="Confirm New Password"
@@ -422,7 +426,7 @@ const Profile = () => {
         </Grid>
 
         {/* Preferences & Info (Right Side) */}
-        <Grid item xs={12} lg={4}>
+        <Grid size={{ xs: 12, lg: 4 }} >
           <Card sx={{ border: '1px solid #e2e8f0', bgcolor: 'white', borderRadius: 3, mb: 3 }}>
             <CardContent sx={{ p: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
@@ -466,8 +470,8 @@ const Profile = () => {
                 />
 
                 <FormControl fullWidth size="small" sx={{ mt: 1 }}>
-                  <InputLabel>Max Radius Range</InputLabel>
-                  <Select
+                  <InputLabel id="label-max-radius-range">Max Radius Range</InputLabel>
+                  <Select labelId="label-max-radius-range"
                     value={formData.preferences.maxDistance}
                     onChange={(e) => handleInputChange('preferences', 'maxDistance', e.target.value)}
                     label="Max Radius Range"

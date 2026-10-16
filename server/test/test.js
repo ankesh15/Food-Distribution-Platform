@@ -1,217 +1,324 @@
 const request = require('supertest');
-const express = require('express');
 const mongoose = require('mongoose');
-const dotenv = require('dotenv');
+const runtime = require('./runtime');
 
-// Load environment variables
-dotenv.config();
-
-// Import the app
 const app = require('../index');
+const User = require('../models/User');
+const Donation = require('../models/Donation');
 
-describe('Food Distribution Platform API Tests', () => {
-  beforeAll(async () => {
-    // Connect to test database
-    if (process.env.NODE_ENV !== 'test') {
-      console.log('Skipping tests in non-test environment');
-      return;
-    }
-    
-    await mongoose.connect(process.env.MONGODB_URI);
-  });
+describe('Food Distribution Platform — Comprehensive Integration & Regression Tests', () => {
+  const timestamp = Date.now();
+  const donorEmail = `donor_${timestamp}@example.com`;
+  const recipientEmail1 = `recip1_${timestamp}@example.com`;
+  const recipientEmail2 = `recip2_${timestamp}@example.com`;
 
+  let donorToken = '';
+  let recipientToken1 = '';
+  let recipientToken2 = '';
+  let testDonationId = '';
+
+  beforeAll(runtime.open, 120000);
   afterAll(async () => {
-    if (process.env.NODE_ENV === 'test') {
-      await mongoose.connection.close();
-    }
+    await app.shutdown();
+    await runtime.close();
   });
 
-  describe('Health Check', () => {
-    it('should return health status', async () => {
-      const response = await request(app)
+  describe('1. System Health & Public Stats', () => {
+    it('GET /api/health returns 200 OK', async () => {
+      const res = await request(app)
         .get('/api/health')
         .expect(200);
 
-      expect(response.body).toHaveProperty('status', 'OK');
-      expect(response.body).toHaveProperty('timestamp');
-      expect(response.body).toHaveProperty('environment');
-    });
-  });
-
-  describe('Authentication', () => {
-    it('should register a new user', async () => {
-      const userData = {
-        email: 'test@example.com',
-        password: 'password123',
-        firstName: 'John',
-        lastName: 'Doe',
-        role: 'donor',
-        organization: 'Test Restaurant'
-      };
-
-      const response = await request(app)
-        .post('/api/auth/register')
-        .send(userData)
-        .expect(201);
-
-      expect(response.body).toHaveProperty('message', 'User registered successfully');
-      expect(response.body).toHaveProperty('user');
-      expect(response.body).toHaveProperty('accessToken');
-      expect(response.body).toHaveProperty('refreshToken');
+      expect(res.body).toHaveProperty('status', 'OK');
+      expect(res.body).toHaveProperty('timestamp');
     });
 
-    it('should login a user', async () => {
-      const loginData = {
-        email: 'test@example.com',
-        password: 'password123'
-      };
-
-      const response = await request(app)
-        .post('/api/auth/login')
-        .send(loginData)
+    it('GET /api/stats/public returns valid counts', async () => {
+      const res = await request(app)
+        .get('/api/stats/public')
         .expect(200);
 
-      expect(response.body).toHaveProperty('message', 'Login successful');
-      expect(response.body).toHaveProperty('user');
-      expect(response.body).toHaveProperty('accessToken');
-      expect(response.body).toHaveProperty('refreshToken');
+      expect(res.body).toHaveProperty('totalDonors');
+      expect(res.body).toHaveProperty('totalRecipients');
+      expect(res.body).toHaveProperty('totalDonations');
+      expect(res.body).toHaveProperty('successRate');
     });
   });
 
-  describe('Donations', () => {
-    let authToken;
-    let donationId;
-
-    beforeAll(async () => {
-      // Login to get auth token
-      const loginResponse = await request(app)
-        .post('/api/auth/login')
+  describe('2. Authentication & Error Formatting (BUG-03, BUG-18, BUG-19)', () => {
+    it('POST /api/auth/register fails with 400 and structured errors on invalid input', async () => {
+      const res = await request(app)
+        .post('/api/auth/register')
         .send({
-          email: 'test@example.com',
-          password: 'password123'
-        });
+          email: 'not-an-email',
+          password: '123',
+          role: 'invalid-role'
+        })
+        .expect(400);
 
-      authToken = loginResponse.body.accessToken;
+      expect(res.body).toHaveProperty('message', 'Validation failed');
+      expect(Array.isArray(res.body.errors)).toBe(true);
+      expect(res.body.errors.length).toBeGreaterThan(0);
+      expect(res.body.errors[0]).toHaveProperty('msg');
     });
 
-    it('should create a new donation', async () => {
-      const donationData = {
-        title: 'Fresh Vegetables',
-        description: 'Assorted fresh vegetables from our garden',
-        foodType: 'produce',
+    it('POST /api/auth/register creates donor user in a single save', async () => {
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: donorEmail,
+          password: 'Password123!',
+          firstName: 'Alice',
+          lastName: 'Donor',
+          role: 'donor',
+          organization: 'Community Market',
+          phone: '+15551234567'
+        })
+        .expect(201);
+
+      expect(res.body).toHaveProperty('accessToken');
+      expect(res.body.user).toHaveProperty('email', donorEmail);
+      expect(res.body.user).toHaveProperty('role', 'donor');
+      donorToken = res.body.accessToken;
+    });
+
+    it('POST /api/auth/register handles duplicate email with 409 Conflict (BUG-19)', async () => {
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: donorEmail,
+          password: 'Password123!',
+          firstName: 'AliceDuplicate',
+          lastName: 'Donor',
+          role: 'donor'
+        })
+        .expect(409);
+
+      expect(res.body.message).toMatch(/already exists/i);
+    });
+
+    it('POST /api/auth/register registers two recipient users for concurrency tests', async () => {
+      const res1 = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: recipientEmail1,
+          password: 'Password123!',
+          firstName: 'Bob',
+          lastName: 'Shelter',
+          role: 'recipient',
+          organization: 'Shelter Alpha',
+          phone: '+15559876543'
+        })
+        .expect(201);
+
+      recipientToken1 = res1.body.accessToken;
+
+      const res2 = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: recipientEmail2,
+          password: 'Password123!',
+          firstName: 'Charlie',
+          lastName: 'Pantry',
+          role: 'recipient',
+          organization: 'Pantry Beta',
+          phone: '+15558765432'
+        })
+        .expect(201);
+
+      recipientToken2 = res2.body.accessToken;
+    });
+
+    it('POST /api/auth/login logs in verified user and returns tokens', async () => {
+      const res = await request(app)
+        .post('/api/auth/login')
+        .send({
+          email: donorEmail,
+          password: 'Password123!'
+        })
+        .expect(200);
+
+      expect(res.body).toHaveProperty('accessToken');
+      expect(res.body).toHaveProperty('refreshToken');
+      expect(res.body.user.email).toBe(donorEmail);
+    });
+  });
+
+  describe('3. Donation Lifecycle, Quantity Validation, & Geocoding (BUG-08, BUG-11)', () => {
+    it('POST /api/donations successfully creates donation with fractional quantity (0.5 servings)', async () => {
+      const now = new Date();
+      const startTime = new Date(now.getTime() + 1000 * 60 * 60 * 2);
+      const endTime = new Date(now.getTime() + 1000 * 60 * 60 * 24);
+      const expiryDate = new Date(now.getTime() + 1000 * 60 * 60 * 48);
+
+      const donationPayload = {
+        title: 'Test surplus artisanal sourdough',
+        description: 'Freshly baked surplus loaves from morning bake',
+        foodType: 'baked',
         quantity: {
-          amount: 20,
-          unit: 'pounds'
+          amount: 0.5, // Tests BUG-08: min 0.1 permitted by schema and validator
+          unit: 'boxes'
         },
-        preparationDate: new Date().toISOString(),
-        expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        preparationDate: now.toISOString(),
+        expiryDate: expiryDate.toISOString(),
         pickupWindow: {
-          startTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          endTime: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString()
         },
         location: {
           address: {
-            street: '123 Main St',
+            street: '350 5th Ave',
             city: 'New York',
             state: 'NY',
-            zipCode: '10001'
-          },
-          coordinates: {
-            coordinates: [-74.0060, 40.7128]
+            zipCode: '10118'
           }
-        }
+        },
+        isUrgent: false
       };
 
-      const response = await request(app)
+      const res = await request(app)
         .post('/api/donations')
-        .set('Authorization', `Bearer ${authToken}`)
-        .send(donationData)
+        .set('Authorization', `Bearer ${donorToken}`)
+        .send(donationPayload)
         .expect(201);
 
-      expect(response.body).toHaveProperty('message', 'Donation created successfully');
-      expect(response.body).toHaveProperty('donation');
-      expect(response.body.donation).toHaveProperty('title', 'Fresh Vegetables');
-      
-      donationId = response.body.donation._id;
+      expect(res.body.donation).toHaveProperty('_id');
+      expect(res.body.donation.quantity.amount).toBe(0.5);
+      // Verify geocoding integration ran (BUG-11)
+      expect(res.body.donation.location.coordinates).toBeDefined();
+      testDonationId = res.body.donation._id;
     });
 
-    it('should get all donations', async () => {
-      const response = await request(app)
-        .get('/api/donations')
+    it('GET /api/donations lists donations with pagination', async () => {
+      const res = await request(app)
+        .get('/api/donations?limit=5')
         .expect(200);
 
-      expect(response.body).toHaveProperty('donations');
-      expect(response.body).toHaveProperty('totalPages');
-      expect(response.body).toHaveProperty('currentPage');
-      expect(response.body).toHaveProperty('total');
-      expect(Array.isArray(response.body.donations)).toBe(true);
+      expect(Array.isArray(res.body.donations)).toBe(true);
+      expect(res.body).toHaveProperty('total');
+      expect(res.body).toHaveProperty('totalPages');
     });
 
-    it('should get a specific donation', async () => {
-      const response = await request(app)
-        .get(`/api/donations/${donationId}`)
+    it('GET /api/donations/:id returns single donation details', async () => {
+      const res = await request(app)
+        .get(`/api/donations/${testDonationId}`)
         .expect(200);
 
-      expect(response.body).toHaveProperty('donation');
-      expect(response.body.donation).toHaveProperty('_id', donationId);
+      expect(res.body.donation._id).toBe(testDonationId);
+      expect(res.body.donation.title).toBe('Test surplus artisanal sourdough');
     });
   });
 
-  describe('User Profile', () => {
-    let authToken;
+  describe('4. Invalid ObjectId Cast Error Prevention (BUG-06)', () => {
+    it('GET /api/donations/:id returns 400 for malformed ObjectId', async () => {
+      const res = await request(app)
+        .get('/api/donations/not-a-valid-id-123')
+        .expect(400);
 
-    beforeAll(async () => {
-      // Login to get auth token
-      const loginResponse = await request(app)
-        .post('/api/auth/login')
+      expect(res.body.message).toMatch(/invalid.*id/i);
+    });
+
+    it('POST /api/donations/:id/claim returns 400 for malformed ObjectId', async () => {
+      const res = await request(app)
+        .post('/api/donations/invalid-id/claim')
+        .set('Authorization', `Bearer ${recipientToken1}`)
+        .expect(400);
+
+      expect(res.body.message).toMatch(/invalid.*id/i);
+    });
+  });
+
+  describe('5. Mass Assignment Vulnerability Prevention (BUG-02)', () => {
+    it('PUT /api/donations/:id ignores attempts to overwrite protected fields like status', async () => {
+      const res = await request(app)
+        .put(`/api/donations/${testDonationId}`)
+        .set('Authorization', `Bearer ${donorToken}`)
         .send({
-          email: 'test@example.com',
-          password: 'password123'
-        });
+          title: 'Updated sourdough title',
+          status: 'completed', // Attacker attempt to bypass lifecycle
+          donor: new mongoose.Types.ObjectId() // Attacker attempt to reassign ownership
+        })
+        .expect(200);
 
-      authToken = loginResponse.body.accessToken;
+      expect(res.body.donation.title).toBe('Updated sourdough title');
+      // Status MUST remain available
+      expect(res.body.donation.status).toBe('available');
+
+      // Verify in database
+      const dbDonation = await Donation.findById(testDonationId);
+      expect(dbDonation.status).toBe('available');
     });
+  });
 
-    it('should get user profile', async () => {
-      const response = await request(app)
+  describe('6. Atomic Claim Concurrency & Race Condition Prevention (BUG-01)', () => {
+    it('simultaneous claims result in exactly 1 success and 1 clean 409 rejection', async () => {
+      // Execute 2 claims concurrently
+      const [claimRes1, claimRes2] = await Promise.all([
+        request(app)
+          .post(`/api/donations/${testDonationId}/claim`)
+          .set('Authorization', `Bearer ${recipientToken1}`),
+        request(app)
+          .post(`/api/donations/${testDonationId}/claim`)
+          .set('Authorization', `Bearer ${recipientToken2}`)
+      ]);
+
+      const statuses = [claimRes1.status, claimRes2.status].sort();
+
+      // Exactly one must succeed (200) and one must be rejected (409)
+      expect(statuses).toEqual([200, 409]);
+
+      // Verify final status in database is 'claimed'
+      const updated = await Donation.findById(testDonationId);
+      expect(updated.status).toBe('claimed');
+      expect(updated.claimedBy.recipient).toBeDefined();
+    });
+  });
+
+  describe('7. Geospatial Index Query Verification (BUG-04)', () => {
+    it('GET /api/users/nearby-recipients executes without 2dsphere index errors', async () => {
+      const res = await request(app)
+        .get('/api/users/nearby-recipients?latitude=40.7128&longitude=-74.0060&maxDistance=25')
+        .set('Authorization', `Bearer ${donorToken}`)
+        .expect(200);
+
+      expect(res.body).toHaveProperty('recipients');
+      expect(Array.isArray(res.body.recipients)).toBe(true);
+    });
+  });
+
+  describe('8. User Profile & Image Upload Integration (BUG-09)', () => {
+    it('GET /api/users/profile returns authenticated user profile', async () => {
+      const res = await request(app)
         .get('/api/users/profile')
-        .set('Authorization', `Bearer ${authToken}`)
+        .set('Authorization', `Bearer ${donorToken}`)
         .expect(200);
 
-      expect(response.body).toHaveProperty('user');
-      expect(response.body.user).toHaveProperty('email', 'test@example.com');
-      expect(response.body.user).toHaveProperty('profile');
+      expect(res.body.user).toHaveProperty('email', donorEmail);
+      expect(res.body.user.profile.firstName).toBe('Alice');
     });
 
-    it('should update user profile', async () => {
-      const updateData = {
-        firstName: 'Jane',
-        lastName: 'Smith',
-        phone: '+1234567890'
-      };
+    it('POST /api/donations/upload rejects non-image files with 400 Bad Request', async () => {
+      const res = await request(app)
+        .post('/api/donations/upload')
+        .set('Authorization', `Bearer ${donorToken}`)
+        .attach('image', Buffer.from('console.log("malicious")'), 'script.sh')
+        .expect(400);
 
-      const response = await request(app)
-        .put('/api/users/profile')
-        .set('Authorization', `Bearer ${authToken}`)
-        .send(updateData)
+      expect(res.body.message).toMatch(/invalid file type/i);
+    });
+
+    it('POST /api/donations/upload accepts valid image files', async () => {
+      // 1x1 transparent PNG buffer
+      const pngBuffer = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+
+      const res = await request(app)
+        .post('/api/donations/upload')
+        .set('Authorization', `Bearer ${donorToken}`)
+        .attach('image', pngBuffer, 'test-image.png')
         .expect(200);
 
-      expect(response.body).toHaveProperty('message', 'Profile updated successfully');
-      expect(response.body.user.profile.firstName).toBe('Jane');
-      expect(response.body.user.profile.lastName).toBe('Smith');
+      expect(res.body).toHaveProperty('url');
+      expect(res.body.url).toMatch(/^\/uploads\/donation-/);
     });
   });
 });
-
-// Simple test runner
-if (require.main === module) {
-  console.log('Running API tests...');
-  
-  // This would normally use a proper test runner like Jest
-  // For now, just export the tests
-  module.exports = {
-    runTests: () => {
-      console.log('Tests completed');
-    }
-  };
-} 

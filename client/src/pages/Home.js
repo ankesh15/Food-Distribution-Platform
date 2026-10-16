@@ -27,12 +27,7 @@ import { useAuth } from '../context/AuthContext';
 const Home = () => {
   const navigate = useNavigate();
   const { getPublicStats } = useAuth();
-  const [stats, setStats] = useState({
-    totalDonors: 0,
-    totalRecipients: 0,
-    totalDonations: 0,
-    successRate: 0
-  });
+  const [stats, setStats] = useState(null);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -65,19 +60,19 @@ const Home = () => {
       icon: <LocationIcon sx={{ fontSize: 24, color: '#10b981' }} />,
       iconBg: 'rgba(16, 185, 129, 0.1)',
       title: 'Proximity Connections',
-      description: 'Find local donations and claims easily using geolocation-based tracking.',
+      description: 'Find local donations and claims easily using stored pickup locations.',
     },
     {
       icon: <NotificationIcon sx={{ fontSize: 24, color: '#f59e0b' }} />,
       iconBg: 'rgba(245, 158, 11, 0.1)',
       title: 'Instant Alerts',
-      description: 'Receive real-time notifications about nearby donations matching your needs.',
+      description: 'Receive real-time notifications about your claims, pickups and completed donations.',
     },
     {
       icon: <SecurityIcon sx={{ fontSize: 24, color: '#10b981' }} />,
       iconBg: 'rgba(16, 185, 129, 0.1)',
-      title: 'Vetted Security',
-      description: 'All organization partners are verified to maintain food handling safety.',
+      title: 'Account Security',
+      description: 'Role-based access and private pickup updates keep each account in control.',
     },
     {
       icon: <SpeedIcon sx={{ fontSize: 24, color: '#f59e0b' }} />,
@@ -116,7 +111,7 @@ const Home = () => {
 
         <Container maxWidth="lg">
           <Grid container spacing={6} alignItems="center">
-            <Grid item xs={12} md={7}>
+            <Grid size={{ xs: 12, md: 7 }} >
               <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, bgcolor: 'rgba(16, 185, 129, 0.15)', px: 2, py: 0.8, borderRadius: 20, mb: 3 }}>
                 <HeartIcon sx={{ color: '#10b981', fontSize: 16 }} />
                 <Typography variant="body2" sx={{ color: '#34d399', fontWeight: 700, fontSize: '0.75rem', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
@@ -193,7 +188,7 @@ const Home = () => {
             </Grid>
             
             {/* Visual Panel Right Side */}
-            <Grid item xs={12} md={5} sx={{ display: { xs: 'none', md: 'block' } }}>
+            <Grid size={{ xs: 12, md: 5 }} sx={{ display: { xs: 'none', md: 'block' } }}>
               <Box
                 sx={{
                   position: 'relative',
@@ -221,23 +216,23 @@ const Home = () => {
                       <RestaurantIcon />
                     </Avatar>
                     <Box>
-                      <Typography variant="body1" sx={{ fontWeight: 700 }}>Eco-Bakery NYC</Typography>
-                      <Typography variant="caption" sx={{ color: '#94a3b8' }}>Donor • 2 mins ago</Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 700 }}>Good food. A clear path.</Typography>
+                      <Typography variant="caption" sx={{ color: '#94a3b8' }}>From surplus to community</Typography>
                     </Box>
                   </Box>
                   <Typography variant="h6" sx={{ fontWeight: 800, mb: 1.5, letterSpacing: '-0.3px' }}>
-                    15kg Fresh Organic Bread
+                    Share. Reserve. Collect.
                   </Typography>
                   <Typography variant="body2" sx={{ color: '#94a3b8', mb: 3 }}>
-                    Freshly baked whole wheat and baguette sourdoughs ready for immediate distribution.
+                    List available food, choose a pickup window, and connect with someone who can put it to good use.
                   </Typography>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.08)', pt: 2.5 }}>
                     <Box>
-                      <Typography variant="caption" sx={{ color: '#64748b', display: 'block' }}>Status</Typography>
-                      <Chip label="Claimable" size="small" sx={{ bgcolor: 'rgba(16, 185, 129, 0.15)', color: '#34d399', fontWeight: 700, height: 22, fontSize: '0.7rem' }} />
+                      <Typography variant="caption" sx={{ color: '#64748b', display: 'block' }}>Start here</Typography>
+                      <Chip label="Food for your community" size="small" sx={{ bgcolor: 'rgba(16, 185, 129, 0.15)', color: '#34d399', fontWeight: 700, height: 22, fontSize: '0.7rem' }} />
                     </Box>
                     <Button variant="contained" size="small" onClick={() => navigate('/donations')} sx={{ py: 0.8, px: 2, fontSize: '0.8rem' }}>
-                      Claim Food
+                      Explore food
                     </Button>
                   </Box>
                 </Paper>
@@ -251,12 +246,12 @@ const Home = () => {
       <Container id="about" maxWidth="lg" sx={{ mt: -6, position: 'relative', zIndex: 2 }}>
         <Grid container spacing={3}>
           {[
-            { value: stats.totalDonors, label: 'Active Donors', color: '#10b981', bg: '#ecfdf5' },
-            { value: stats.totalDonations, label: 'Donations Completed', color: '#f59e0b', bg: '#fffbeb' },
-            { value: stats.totalRecipients, label: 'Partner Recipients', color: '#10b981', bg: '#ecfdf5' },
-            { value: `${stats.successRate}%`, label: 'Success Logistics Rate', color: '#ef4444', bg: '#fef2f2' }
+            { value: (stats?.totalDonors ?? '—'), label: 'Active Donors', color: '#10b981', bg: '#ecfdf5' },
+            { value: (stats?.completedDonations ?? '—'), label: 'Donations Completed', color: '#f59e0b', bg: '#fffbeb' },
+            { value: (stats?.totalRecipients ?? '—'), label: 'Partner Recipients', color: '#10b981', bg: '#ecfdf5' },
+            { value: `${(stats?.successRate ?? '—')}%`, label: 'Donation completion rate', color: '#ef4444', bg: '#fef2f2' }
           ].map((stat, idx) => (
-            <Grid item xs={6} md={3} key={idx}>
+            <Grid size={{ xs: 6, md: 3 }} key={idx}>
               <Card sx={{ bgcolor: 'white', border: '1px solid #e2e8f0', borderRadius: 3 }}>
                 <CardContent sx={{ p: 3, textAlign: 'center' }}>
                   <Typography variant="h3" sx={{ fontWeight: 800, color: stat.color, mb: 1, letterSpacing: '-1px' }}>
@@ -279,12 +274,12 @@ const Home = () => {
             Engineered for Modern Efficiency
           </Typography>
           <Typography variant="body1" sx={{ color: 'text.secondary', maxWidth: 600, mx: 'auto' }}>
-            Our streamlined portal minimizes steps between donor disposal lists and recipient food tables.
+            Our streamlined portal minimizes steps between available food and the communities who need it.
           </Typography>
         </Box>
         <Grid container spacing={4}>
           {features.map((feature, index) => (
-            <Grid item xs={12} sm={6} md={4} key={index}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={index}>
               <Card className="glass-card-hover" sx={{ height: '100%', bgcolor: 'white', borderRadius: 3 }}>
                 <CardContent sx={{ p: 4 }}>
                   <Box 

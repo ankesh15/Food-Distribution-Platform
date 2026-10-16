@@ -1,0 +1,12 @@
+
+> food-distribution-platform@1.0.0 test
+> jest --runInBand --detectOpenHandles
+
+(node:565053) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+Test Suites: 5 passed, 5 total
+Tests:       71 passed, 71 total
+Snapshots:   0 total
+Time:        11.288 s
+Ran all test suites.

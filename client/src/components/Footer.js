@@ -31,8 +31,8 @@ const Footer = () => {
                 FoodShare
               </Typography>
             </Box>
-            <Typography variant="body2" sx={{ color: '#64748b', maxWidth: 300, fontSize: '0.85rem' }}>
-              A modern, decentralized food sustainability catalog. We connect local restaurants and grocers with shelter groups to fight hunger and reduce food waste.
+            <Typography variant="body2" sx={{ color: '#94a3b8', maxWidth: 300, fontSize: '0.85rem' }}>
+              A community food sharing platform. We connect local restaurants and grocers with shelter groups to fight hunger and reduce food waste.
             </Typography>
           </Box>
 
@@ -81,10 +81,10 @@ const Footer = () => {
           alignItems="center"
           spacing={2}
         >
-          <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#64748b' }}>
+          <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#94a3b8' }}>
             © {new Date().getFullYear()} FoodShare. All rights reserved.
           </Typography>
-          <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center' }}>
+          <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#94a3b8', display: 'flex', alignItems: 'center' }}>
             Built with <HeartIcon sx={{ fontSize: 13, mx: 0.5, color: '#ef4444' }} /> for social and environmental impact.
           </Typography>
         </Stack>

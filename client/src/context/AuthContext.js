@@ -5,8 +5,9 @@ import { API_URL } from '../config';
 const AuthContext = createContext();
 
 // Create axios instance with base URL
-const api = axios.create({
+export const api = axios.create({
   baseURL: API_URL,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -21,86 +22,41 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor for automatic token refresh
-let isRefreshing = false;
-let failedQueue = [];
-
-const processQueue = (error, token = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
-  });
-  failedQueue = [];
+// Share one refresh across concurrent requests and retry each request only once.
+let refreshPromise;
+const clearSession = () => {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  window.dispatchEvent(new Event('auth-expired'));
 };
-
-api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    // Production-safe network error handling
-    if (!error.response) {
-      error.response = {
-        status: 503,
-        data: {
-          message: 'Network Error: Cannot connect to the server. Please check your internet connection.'
-        }
-      };
-      return Promise.reject(error);
-    }
-
-    const originalRequest = error.config;
-
-    // If 401 and not already retrying
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            return api(originalRequest);
-          })
-          .catch((err) => Promise.reject(err));
-      }
-
-      originalRequest._retry = true;
-      isRefreshing = true;
-
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (!refreshToken) {
-        isRefreshing = false;
-        return Promise.reject(error);
-      }
-
-      try {
-        const { data } = await axios.post(`${API_URL}/auth/refresh`, {
-          refreshToken,
-        });
-
-        localStorage.setItem('accessToken', data.accessToken);
-        localStorage.setItem('refreshToken', data.refreshToken);
-
-        api.defaults.headers.Authorization = `Bearer ${data.accessToken}`;
-        processQueue(null, data.accessToken);
-        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
-
-        return api(originalRequest);
-      } catch (refreshError) {
-        processQueue(refreshError, null);
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
-        return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
-      }
-    }
-
-    return Promise.reject(error);
+const saveTokens = data => {
+  localStorage.setItem('accessToken', data.accessToken);
+  localStorage.setItem('refreshToken', data.refreshToken);
+  window.dispatchEvent(new Event('auth-token-changed'));
+};
+api.interceptors.response.use(response => response, async error => {
+  const request = error.config;
+  const isAuthAttempt = /\/auth\/(login|register|refresh)$/.test(request?.url || '');
+  if (error.response?.status !== 401 || !request || request._retry || isAuthAttempt) return Promise.reject(error);
+  request._retry = true;
+  const refreshToken = localStorage.getItem('refreshToken');
+  if (!refreshToken) { clearSession(); return Promise.reject(error); }
+  if (!refreshPromise) {
+    refreshPromise = axios.post(`${API_URL}/auth/refresh`, { refreshToken }, { timeout: 15000 })
+      .then(({ data }) => {
+        if (localStorage.getItem('refreshToken') !== refreshToken) throw new Error('Session changed');
+        saveTokens(data);
+        return data.accessToken;
+      }).catch(refreshError => {
+        if (localStorage.getItem('refreshToken') === refreshToken && refreshError.response?.status === 401) clearSession();
+        throw refreshError;
+      }).finally(() => { refreshPromise = null; });
   }
-);
+  const token = await refreshPromise;
+  request.headers.Authorization = `Bearer ${token}`;
+  return api(request);
+});
+export const apiError = error => error.response?.data?.errors?.[0]?.msg || error.response?.data?.message || 'Unable to reach the server. Please try again.';
 
 // ─── Donation API Methods ───────────────────────────────────
 
@@ -109,7 +65,7 @@ const getDonations = async (filters = {}) => {
     const response = await api.get('/donations', { params: filters });
     return response.data;
   } catch (error) {
-    return { donations: [], totalPages: 0, currentPage: 1, total: 0 };
+    return { donations: [], totalPages: 0, currentPage: 1, total: 0, error: apiError(error) };
   }
 };
 
@@ -118,16 +74,16 @@ const getDonationById = async (id) => {
     const response = await api.get(`/donations/${id}`);
     return response.data;
   } catch (error) {
-    return null;
+    return { error: apiError(error) };
   }
 };
 
 const createDonation = async (donationData) => {
   try {
     const response = await api.post('/donations', donationData);
-    return { success: true, donation: response.data };
+    return { success: true, donation: response.data.donation };
   } catch (error) {
-    const message = error.response?.data?.message || error.response?.data?.errors?.[0]?.msg || 'Failed to create donation';
+    const message = apiError(error);
     return { success: false, error: message };
   }
 };
@@ -135,7 +91,7 @@ const createDonation = async (donationData) => {
 const updateDonation = async (id, donationData) => {
   try {
     const response = await api.put(`/donations/${id}`, donationData);
-    return { success: true, donation: response.data };
+    return { success: true, donation: response.data.donation };
   } catch (error) {
     const message = error.response?.data?.message || 'Failed to update donation';
     return { success: false, error: message };
@@ -155,7 +111,7 @@ const deleteDonation = async (id) => {
 const cancelDonation = async (id) => {
   try {
     const response = await api.post(`/donations/${id}/cancel`);
-    return { success: true, donation: response.data };
+    return { success: true, donation: response.data.donation };
   } catch (error) {
     const message = error.response?.data?.message || 'Failed to cancel donation';
     return { success: false, error: message };
@@ -165,7 +121,7 @@ const cancelDonation = async (id) => {
 const claimDonation = async (id) => {
   try {
     const response = await api.post(`/donations/${id}/claim`);
-    return { success: true, donation: response.data };
+    return { success: true, donation: response.data.donation };
   } catch (error) {
     const message = error.response?.data?.message || 'Failed to claim donation';
     return { success: false, error: message };
@@ -175,7 +131,7 @@ const claimDonation = async (id) => {
 const pickupDonation = async (id) => {
   try {
     const response = await api.post(`/donations/${id}/pickup`);
-    return { success: true, donation: response.data };
+    return { success: true, donation: response.data.donation };
   } catch (error) {
     const message = error.response?.data?.message || 'Failed to mark donation as picked up';
     return { success: false, error: message };
@@ -185,7 +141,7 @@ const pickupDonation = async (id) => {
 const completeDonation = async (id) => {
   try {
     const response = await api.post(`/donations/${id}/complete`);
-    return { success: true, donation: response.data };
+    return { success: true, donation: response.data.donation };
   } catch (error) {
     const message = error.response?.data?.message || 'Failed to complete donation';
     return { success: false, error: message };
@@ -217,7 +173,7 @@ const getAdminStats = async () => {
     const response = await api.get('/admin/stats');
     return response.data;
   } catch (error) {
-    return null;
+    throw error;
   }
 };
 
@@ -226,7 +182,7 @@ const getAdminUsers = async (filters = {}) => {
     const response = await api.get('/admin/users', { params: filters });
     return response.data;
   } catch (error) {
-    return { users: [], totalPages: 0, currentPage: 1, total: 0 };
+    throw error;
   }
 };
 
@@ -235,7 +191,7 @@ const getAdminDonations = async (filters = {}) => {
     const response = await api.get('/admin/donations', { params: filters });
     return response.data;
   } catch (error) {
-    return { donations: [], totalPages: 0, currentPage: 1, total: 0 };
+    throw error;
   }
 };
 
@@ -291,6 +247,12 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  useEffect(() => {
+    const onExpired = () => setUser(null);
+    window.addEventListener('auth-expired', onExpired);
+    return () => window.removeEventListener('auth-expired', onExpired);
+  }, []);
+
   // Check if user is logged in on app start
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -307,8 +269,8 @@ export const AuthProvider = ({ children }) => {
       const response = await api.post('/auth/verify');
       setUser(response.data.user);
     } catch (error) {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
+      if (error.response?.status === 401) clearSession();
+      setError(apiError(error));
     } finally {
       setLoading(false);
     }
@@ -321,8 +283,7 @@ export const AuthProvider = ({ children }) => {
       
       const { accessToken, refreshToken, user } = response.data;
       
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
+      saveTokens({ accessToken, refreshToken });
       setUser(user);
       
       return { success: true };
@@ -340,14 +301,15 @@ export const AuthProvider = ({ children }) => {
 
       const { accessToken, refreshToken, user } = response.data;
 
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
+      saveTokens({ accessToken, refreshToken });
       setUser(user);
 
       return { success: true };
     } catch (error) {
+      const firstError = error.response?.data?.errors?.[0];
       const message =
-        error.response?.data?.errors ||
+        (firstError && (firstError.msg || firstError.message)) ||
+        (typeof error.response?.data?.errors === 'string' ? error.response.data.errors : null) ||
         error.response?.data?.message ||
         'Registration failed';
       setError(message);
@@ -355,14 +317,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = async () => {
+  const logout = async (localOnly = false) => {
     try {
-      await api.post('/auth/logout');
+      if (!localOnly) await api.post('/auth/logout');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
+      clearSession();
       setUser(null);
     }
   };
@@ -415,6 +376,19 @@ export const AuthProvider = ({ children }) => {
     // Account methods
     changePassword,
     getPublicStats,
+    uploadImage: async (file) => {
+      try {
+        const formData = new FormData();
+        formData.append('image', file);
+        const response = await api.post('/donations/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return { success: true, url: response.data.url };
+      } catch (error) {
+        const msg = error.response?.data?.message || 'Failed to upload image';
+        return { success: false, error: msg };
+      }
+    },
   };
 
   return (

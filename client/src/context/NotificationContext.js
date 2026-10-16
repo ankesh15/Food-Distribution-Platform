@@ -1,202 +1,77 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { useAuth } from './AuthContext';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useAuth, apiError } from './AuthContext';
 import { SOCKET_URL } from '../config';
-
 const NotificationContext = createContext();
-
-export const useNotifications = () => {
-  const context = useContext(NotificationContext);
-  if (!context) {
-    throw new Error('useNotifications must be used within a NotificationProvider');
-  }
-  return context;
-};
-
+export const useNotifications = () => useContext(NotificationContext);
+const normalized = record => ({ ...record, id: record._id, timestamp: record.createdAt });
 export const NotificationProvider = ({ children }) => {
-  const { user } = useAuth();
-  const [notifications, setNotifications] = useState([
-    {
-      id: 'notif-init-1',
-      title: 'Welcome to FoodShare!',
-      message: 'Explore the live food feed or publish food surplus to help your community.',
-      type: 'info',
-      read: false,
-      timestamp: new Date(Date.now() - 3600000).toISOString(),
-    },
-    {
-      id: 'notif-init-2',
-      title: 'Urgent: Fresh Veggies Available',
-      message: 'Eco-Bakery NYC listed fresh organic produce near your area.',
-      type: 'donation',
-      read: false,
-      timestamp: new Date(Date.now() - 7200000).toISOString(),
-    }
-  ]);
+  const { user, api } = useAuth();
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [toasts, setToasts] = useState([]);
   const [socket, setSocket] = useState(null);
-
-  const addToast = React.useCallback((title, message, type = 'info') => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    setToasts((prev) => [...prev, { id, title, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const userId = user?._id;
+  const currentUser = useRef(userId);
+  currentUser.current = userId;
+  const addNotification = useCallback((title, message, type = 'info') => {
+    setToasts(prev => [...prev.slice(-3), { id: `${Date.now()}-${Math.random()}`, title, message, type }]);
   }, []);
-
-  const addNotification = React.useCallback((title, message, type = 'info') => {
-    const newNotif = {
-      id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      title,
-      message,
-      type,
-      read: false,
-      timestamp: new Date().toISOString(),
-    };
-    setNotifications((prev) => [newNotif, ...prev]);
-    addToast(title, message, type);
-  }, [addToast]);
-
   useEffect(() => {
-    if (!user) {
-      if (socket) {
-        socket.disconnect();
-      }
-      return;
-    }
-
-    const newSocket = io(SOCKET_URL, {
-      transports: ['websocket'],
+    if (!toasts.length) return;
+    const timer = setTimeout(() => setToasts(prev => prev.slice(1)), 5000);
+    return () => clearTimeout(timer);
+  }, [toasts]);
+  const refresh = useCallback(async () => {
+    if (!userId) return;
+    setLoading(true);
+    try {
+      const { data } = await api.get('/notifications');
+      if (currentUser.current !== userId) return;
+      setNotifications(data.notifications.map(normalized));
+      setUnreadCount(data.unreadCount);
+      setError('');
+    } catch (err) { if (currentUser.current === userId) setError(apiError(err)); }
+    finally { if (currentUser.current === userId) setLoading(false); }
+  }, [api, userId]);
+  useEffect(() => {
+    setNotifications([]); setUnreadCount(0); setToasts([]); setError('');
+    if (!userId) return;
+    const connection = io(SOCKET_URL, { autoConnect: false, auth: cb => cb({ token: localStorage.getItem('accessToken') }) });
+    connection.on('connect', refresh);
+    connection.on('donation-created', data => addNotification('New food available', data.title, 'donation'));
+    connection.on('notification', record => {
+      if (currentUser.current !== userId) return;
+      const item = normalized(record);
+      setNotifications(prev => [item, ...prev.filter(n => n.id !== item.id)].slice(0, 100));
+      if (!item.read) setUnreadCount(count => count + 1);
+      addNotification(item.title, item.message, item.type);
     });
-
-    newSocket.on('connect', () => {
-      console.log('⚡ Connected to websocket');
-      newSocket.emit('join-room', user.role);
-      newSocket.emit('join-room', `user-${user._id}`);
-    });
-
-    // Handle real-time socket events
-    newSocket.on('donation-created', (data) => {
-      addNotification(
-        'New Donation Listed',
-        `${data.donorName || 'A donor'} listed: ${data.title}`,
-        'donation'
-      );
-    });
-
-    newSocket.on('request-created', (data) => {
-      addNotification(
-        'New Food Request',
-        `${data.recipientName || 'A shelter'} requested: ${data.title}`,
-        'request'
-      );
-    });
-
-    newSocket.on('volunteer-assigned', (data) => {
-      addNotification(
-        'Delivery Courier Vetted',
-        `Volunteer assigned to pick up: ${data.title}`,
-        'volunteer'
-      );
-    });
-
-    newSocket.on('delivery-completed', (data) => {
-      addNotification(
-        'Delivery Completed!',
-        `Food listing "${data.title}" successfully reached its shelter destination.`,
-        'success'
-      );
-    });
-
-    newSocket.on('announcement', (data) => {
-      addNotification(
-        'System Announcement',
-        data.message,
-        'info'
-      );
-    });
-
-    setSocket(newSocket);
-
-    return () => {
-      newSocket.disconnect();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
-
-  const markAsRead = (id) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
+    // Polling reconciles the inbox even if a socket was disconnected or an event was missed.
+    const interval = setInterval(refresh, 60000);
+    const reconnect = () => { connection.disconnect(); connection.connect(); };
+    connection.on('disconnect', reason => { if (reason === 'io server disconnect') setSocket(null); });
+    connection.on('connect', () => setSocket(connection));
+    window.addEventListener('auth-token-changed', reconnect);
+    refresh(); connection.connect();
+    return () => { clearInterval(interval); window.removeEventListener('auth-token-changed', reconnect); connection.disconnect(); setSocket(null); };
+  }, [userId, refresh, addNotification]);
+  const mutate = async (method, path) => {
+    try { await api[method](path); await refresh(); }
+    catch (err) { if (currentUser.current === userId) setError(apiError(err)); }
   };
-
-  const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  };
-
-  const deleteNotification = (id) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-  };
-
-  const unreadCount = notifications.filter((n) => !n.read).length;
-
-  return (
-    <NotificationContext.Provider
-      value={{
-        notifications,
-        unreadCount,
-        markAsRead,
-        markAllAsRead,
-        deleteNotification,
-        addNotification,
-        toasts,
-        socket,
-      }}
-    >
-      {children}
-      {/* Toast Alert Portal Container */}
-      <div className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2 max-w-sm w-full">
-        <AnimatePresence>
-          {toasts.map((toast) => (
-            <motion.div
-              key={toast.id}
-              initial={{ opacity: 0, y: 50, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9, x: 100 }}
-              className={`p-4 rounded-xl shadow-xl border flex flex-col gap-1 backdrop-blur-md bg-white/95 ${
-                toast.type === 'donation'
-                  ? 'border-emerald-200 text-emerald-950'
-                  : toast.type === 'request'
-                  ? 'border-amber-200 text-amber-950'
-                  : toast.type === 'success'
-                  ? 'border-blue-200 text-blue-950'
-                  : 'border-slate-200 text-slate-950'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-extrabold text-xs uppercase tracking-wider">
-                  {toast.type === 'donation'
-                    ? '✨ Donation'
-                    : toast.type === 'request'
-                    ? '📦 Request'
-                    : toast.type === 'success'
-                    ? '✅ Success'
-                    : '🔔 Notification'}
-                </span>
-                <button
-                  onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
-                  className="text-slate-400 hover:text-slate-600 text-xs font-bold"
-                >
-                  ✕
-                </button>
-              </div>
-              <h4 className="font-bold text-sm">{toast.title}</h4>
-              <p className="text-xs text-slate-600">{toast.message}</p>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-    </NotificationContext.Provider>
-  );
+  return <NotificationContext.Provider value={{ notifications, unreadCount, toasts, socket, error, loading, refresh, addNotification,
+    markAsRead: id => mutate('patch', `/notifications/${id}/read`),
+    markAllAsRead: () => mutate('patch', '/notifications/read-all'),
+    deleteNotification: id => mutate('delete', `/notifications/${id}`) }}>
+    {children}
+    <div aria-live="polite" className="fixed bottom-5 right-4 left-4 sm:left-auto z-[9999] flex flex-col gap-2 sm:w-80">
+      {toasts.map(toast => <div key={toast.id} className="p-4 rounded-xl shadow-xl border border-emerald-200 bg-white text-slate-900">
+        <div className="flex justify-between gap-3"><strong className="text-sm">{toast.title}</strong><button aria-label="Dismiss notification" onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}>×</button></div>
+        <p className="text-sm text-slate-600 mt-1">{toast.message}</p>
+      </div>)}
+    </div>
+  </NotificationContext.Provider>;
 };

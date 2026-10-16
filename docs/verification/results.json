@@ -1,0 +1,52 @@
+{
+  "date": "2026-10-16",
+  "backend": {
+    "suites": 5,
+    "passed": 71
+  },
+  "frontend": {
+    "suites": 3,
+    "passed": 16
+  },
+  "syntax": "passed",
+  "lint": "passed, zero warnings",
+  "productionBuild": "passed",
+  "dockerBuild": "passed, local image only",
+  "httpSmoke": "passed, including disconnected readiness",
+  "runtimeDependencyAudits": {
+    "backend": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "frontend": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    }
+  },
+  "allDependencyAudits": {
+    "server": {
+      "info": 0,
+      "low": 0,
+      "moderate": 19,
+      "high": 0,
+      "critical": 0,
+      "total": 19
+    },
+    "client": {
+      "info": 0,
+      "low": 3,
+      "moderate": 33,
+      "high": 63,
+      "critical": 0,
+      "total": 99
+    }
+  }
+}

@@ -1,0 +1,11 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+process.env.NODE_ENV = 'test';
+process.env.JWT_SECRET = 'isolated-test-access-secret-at-least-32';
+process.env.JWT_REFRESH_SECRET = 'isolated-test-refresh-secret-at-least-32';
+for (const key of ['MONGODB_URI', 'EMAIL_HOST', 'EMAIL_USER', 'EMAIL_PASS', 'TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'GOOGLE_MAPS_API_KEY', 'CLIENT_URL', 'TRUST_PROXY_HOPS']) delete process.env[key];
+process.env.UPLOAD_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'foodshare-tests-'));
+process.env.MONGOMS_DOWNLOAD_IGNORE_MISSING_HEADER = 'true';
+afterAll(() => fs.rmSync(process.env.UPLOAD_DIR, { recursive: true, force: true }));
+jest.setTimeout(120000);

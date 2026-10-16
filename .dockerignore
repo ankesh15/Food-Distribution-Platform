@@ -1,0 +1,13 @@
+.git
+.env
+.env.*
+**/.env
+**/.env.*
+**/node_modules
+client/build
+server/uploads/*
+coverage
+**/*.log
+image.png
+
+server/test/

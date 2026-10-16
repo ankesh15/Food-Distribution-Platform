@@ -1,0 +1,17 @@
+
+> food-distribution-platform@1.0.0 test:client
+> cd client && npm test -- --watchAll=false
+
+
+> client@0.1.0 test
+> react-scripts test --watchAll=false
+
+PASS src/context/AuthContext.test.js
+PASS src/App.test.js (8.344 s)
+PASS src/pages/Workflows.test.js (9.599 s)
+
+Test Suites: 3 passed, 3 total
+Tests:       16 passed, 16 total
+Snapshots:   0 total
+Time:        10.875 s, estimated 13 s
+Ran all test suites.

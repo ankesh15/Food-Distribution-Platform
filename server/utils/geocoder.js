@@ -11,12 +11,7 @@ const geocoder = NodeGeocoder({
 const geocodeAddress = async (address) => {
   try {
     if (!process.env.GOOGLE_MAPS_API_KEY) {
-      console.warn('Google Maps API key not configured, using fallback coordinates');
-      return {
-        latitude: 40.7128,
-        longitude: -74.0060,
-        formattedAddress: address
-      };
+      throw new Error('Geocoding is not configured');
     }
 
     const results = await geocoder.geocode(address);

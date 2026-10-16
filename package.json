@@ -5,11 +5,17 @@
   "main": "server/index.js",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "nodemon server/index.js",
+    "server": "node --watch server/index.js",
     "client": "cd client && npm start",
     "build": "cd client && npm run build",
     "install-all": "npm install && cd client && npm install",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "test": "jest --runInBand --detectOpenHandles",
+    "test:client": "cd client && npm test -- --watchAll=false",
+    "test:all": "npm test && npm run test:client",
+    "lint": "npm run lint --prefix client",
+    "check:server": "find server scripts -name \"*.js\" -not -path \"*/uploads/*\" -exec node --check {} +",
+    "admin:create": "node scripts/create-admin.js"
   },
   "keywords": [
     "food-waste",
@@ -30,14 +36,30 @@
     "helmet": "^7.0.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^7.5.0",
-    "multer": "^1.4.5-lts.1",
+    "multer": "^2.4.0",
     "node-geocoder": "^4.2.0",
-    "nodemailer": "^6.9.4",
+    "nodemailer": "^10.1.2",
     "socket.io": "^4.7.2",
     "twilio": "^4.15.0"
   },
   "devDependencies": {
     "concurrently": "^8.2.0",
-    "nodemon": "^3.0.1"
+    "jest": "^30.5.2",
+    "mongodb-memory-server": "^11.3.0",
+    "socket.io-client": "^4.8.4",
+    "supertest": "^7.2.2"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/server/test/**/*.test.js",
+      "**/server/test/test.js"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/server/test/setup.js"
+    ]
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

@@ -49,6 +49,7 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState('');
 
   const handleChange = (e) => {
     setFormData({
@@ -61,13 +62,16 @@ const Register = () => {
     e.preventDefault();
     setLoading(true);
     clearError();
+    setFormError('');
 
     // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match');
+      setFormError('Passwords do not match');
       setLoading(false);
       return;
     }
+
+    if (formData.password.length < 8 || new TextEncoder().encode(formData.password).length > 72) { setFormError('Use a password between 8 and 72 UTF-8 bytes.'); setLoading(false); return; }
 
     // Remove confirmPassword from data
     const { confirmPassword, ...registerData } = formData;
@@ -118,7 +122,7 @@ const Register = () => {
 
         <Box sx={{ position: 'relative', my: 'auto', maxWidth: 480 }}>
           <Typography variant="h3" sx={{ fontWeight: 800, mb: 3, letterSpacing: '-1px', lineHeight: 1.2 }}>
-            Start Your ESG Food Rescue Journey.
+            Help Good Food Reach More People.
           </Typography>
           <Typography variant="body1" sx={{ color: '#94a3b8', mb: 4, lineHeight: 1.7 }}>
             Join a vetted ecosystem of corporate food donors and shelter organizations. Save food, minimize landfill emissions, and help local food-insecure families.
@@ -139,7 +143,7 @@ const Register = () => {
         </Box>
 
         <Typography variant="caption" sx={{ color: '#64748b', position: 'relative' }}>
-          © {new Date().getFullYear()} FoodShare Inc. All rights reserved.
+          © {new Date().getFullYear()} FoodShare All rights reserved.
         </Typography>
       </Box>
 
@@ -169,28 +173,24 @@ const Register = () => {
           <CardContent sx={{ p: { xs: 4, sm: 5 } }}>
             <Box sx={{ mb: 4, textAlign: 'center' }}>
               <LogoIcon sx={{ fontSize: 44, color: '#10b981', mb: 2 }} />
-              <Typography variant="h4" sx={{ fontWeight: 800, mb: 1, letterSpacing: '-0.5px' }}>
+              <Typography component="h1" variant="h4" sx={{ fontWeight: 800, mb: 1, letterSpacing: '-0.5px' }}>
                 Create Account
               </Typography>
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                Join our decentralized supply network today
+                Share surplus food or find support for your community
               </Typography>
             </Box>
 
-            {error && (
-              <Alert severity="error" onClose={clearError} sx={{ mb: 3, borderRadius: 2 }}>
-                {typeof error === 'string'
-                  ? error
-                  : Array.isArray(error)
-                    ? error.map((err, idx) => <div key={idx}>{err.msg || err.message}</div>)
-                    : 'Validation failed'}
+            {(error || formError) && (
+              <Alert severity="error" onClose={() => { clearError(); setFormError(''); }} sx={{ mb: 3, borderRadius: 2 }}>
+                {formError || (typeof error === 'string' ? error : 'Registration failed. Please check your details.')}
               </Alert>
             )}
 
             <Box component="form" onSubmit={handleSubmit}>
               <Grid container spacing={2.5}>
                 {/* Personal Information */}
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <TextField
                     fullWidth
                     label="First Name"
@@ -208,7 +208,7 @@ const Register = () => {
                     }}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <TextField
                     fullWidth
                     label="Last Name"
@@ -228,7 +228,7 @@ const Register = () => {
                 </Grid>
 
                 {/* Contact Information */}
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <TextField
                     fullWidth
                     label="Email Address"
@@ -247,7 +247,7 @@ const Register = () => {
                     }}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <TextField
                     fullWidth
                     label="Phone Number"
@@ -266,7 +266,7 @@ const Register = () => {
                 </Grid>
 
                 {/* Role & Organization */}
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <FormControl fullWidth>
                     <InputLabel id="role-select-label">Account Role</InputLabel>
                     <Select
@@ -282,7 +282,7 @@ const Register = () => {
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <TextField
                     fullWidth
                     label="Organization Name"
@@ -301,7 +301,7 @@ const Register = () => {
                 </Grid>
 
                 {/* Address */}
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }} >
                   <TextField
                     fullWidth
                     label="Pick-Up Address"
@@ -320,7 +320,7 @@ const Register = () => {
                 </Grid>
 
                 {/* Password Fields */}
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <TextField
                     fullWidth
                     label="Password"
@@ -329,7 +329,7 @@ const Register = () => {
                     value={formData.password}
                     onChange={handleChange}
                     required
-                    placeholder="Min 6 characters"
+                    placeholder="Min 8 characters"
                     InputProps={{
                       startAdornment: (
                         <InputAdornment position="start">
@@ -338,7 +338,7 @@ const Register = () => {
                       ),
                       endAdornment: (
                         <InputAdornment position="end">
-                          <IconButton onClick={() => setShowPassword(!showPassword)} edge="end" sx={{ color: '#94a3b8' }}>
+                          <IconButton aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(!showPassword)} edge="end" sx={{ color: '#94a3b8' }}>
                             {showPassword ? <VisibilityOffIcon sx={{ fontSize: 20 }} /> : <VisibilityIcon sx={{ fontSize: 20 }} />}
                           </IconButton>
                         </InputAdornment>
@@ -346,7 +346,7 @@ const Register = () => {
                     }}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <TextField
                     fullWidth
                     label="Confirm Password"
@@ -364,7 +364,7 @@ const Register = () => {
                       ),
                       endAdornment: (
                         <InputAdornment position="end">
-                          <IconButton onClick={() => setShowConfirmPassword(!showConfirmPassword)} edge="end" sx={{ color: '#94a3b8' }}>
+                          <IconButton aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'} onClick={() => setShowConfirmPassword(!showConfirmPassword)} edge="end" sx={{ color: '#94a3b8' }}>
                             {showConfirmPassword ? <VisibilityOffIcon sx={{ fontSize: 20 }} /> : <VisibilityIcon sx={{ fontSize: 20 }} />}
                           </IconButton>
                         </InputAdornment>

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Container,
   Typography,
@@ -37,9 +37,26 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
 const CreateDonation = () => {
-  const { createDonation, user } = useAuth();
+  const { createDonation, updateDonation, getDonationById, uploadImage, user } = useAuth();
   const navigate = useNavigate();
+  const { id } = useParams();
+  const [fetching, setFetching] = useState(Boolean(id));
+  const [loadError, setLoadError] = useState('');
+  useEffect(() => {
+    let active = true;
+    if (!id) return;
+    getDonationById(id).then(data => {
+      if (!active) return;
+      const donation = data?.donation;
+      if (!donation || (donation.donor?._id || donation.donor) !== user._id || donation.status !== 'available') {
+        setLoadError(data?.error || 'Only your available donations can be edited.');
+      } else setFormData({ ...donation, images: donation.images || [], tags: donation.tags || [], preparationDate: new Date(donation.preparationDate), expiryDate: new Date(donation.expiryDate), pickupWindow: { startTime: new Date(donation.pickupWindow.startTime), endTime: new Date(donation.pickupWindow.endTime) } });
+      setFetching(false);
+    });
+    return () => { active = false; };
+  }, [id, getDonationById, user._id]);
   const [loading, setLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -70,7 +87,8 @@ const CreateDonation = () => {
     },
     isUrgent: false,
     specialInstructions: '',
-    tags: []
+    tags: [],
+    images: []
   });
 
   const [newTag, setNewTag] = useState('');
@@ -109,6 +127,7 @@ const CreateDonation = () => {
       ...prev,
       location: {
         ...prev.location,
+        coordinates: { type: 'Point', coordinates: [0, 0] },
         address: {
           ...prev.location.address,
           [field]: value
@@ -127,7 +146,7 @@ const CreateDonation = () => {
   };
 
   const handleAddTag = () => {
-    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
+    if (formData.tags.length < 10 && newTag.trim().length <= 40 && newTag.trim() && !formData.tags.includes(newTag.trim())) {
       setFormData(prev => ({
         ...prev,
         tags: [...prev.tags, newTag.trim()]
@@ -143,6 +162,35 @@ const CreateDonation = () => {
     }));
   };
 
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (formData.images.length >= 5) { setError('Use at most 5 images'); return; }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image must be smaller than 5MB');
+      return;
+    }
+    setUploadingImage(true);
+    setError('');
+    const result = await uploadImage(file);
+    if (result.success) {
+      setFormData(prev => ({
+        ...prev,
+        images: [...(prev.images || []), { url: result.url, caption: file.name }]
+      }));
+    } else {
+      setError(result.error || 'Failed to upload image');
+    }
+    setUploadingImage(false);
+  };
+
+  const handleRemoveImage = (indexToRemove) => {
+    setFormData(prev => ({
+      ...prev,
+      images: (prev.images || []).filter((_, idx) => idx !== indexToRemove)
+    }));
+  };
+
   const validateForm = () => {
     if (!formData.title.trim()) return 'Title is required';
     if (!formData.description.trim()) return 'Description is required';
@@ -152,6 +200,10 @@ const CreateDonation = () => {
     if (!formData.location.address.city.trim()) return 'City is required';
     if (!formData.location.address.state.trim()) return 'State is required';
     if (!formData.location.address.zipCode.trim()) return 'ZIP code is required';
+    if ([formData.preparationDate, formData.expiryDate, formData.pickupWindow.startTime, formData.pickupWindow.endTime].some(value => !value || Number.isNaN(new Date(value).getTime()))) return 'Enter valid preparation, expiry and pickup dates';
+    if (formData.preparationDate >= formData.expiryDate) return 'Expiry must follow preparation';
+    if (formData.pickupWindow.startTime < formData.preparationDate) return 'Pickup cannot precede preparation';
+    if (formData.pickupWindow.endTime > formData.expiryDate) return 'Pickup must end before expiry';
     if (formData.pickupWindow.startTime >= formData.pickupWindow.endTime) {
       return 'Pickup end time must be after start time';
     }
@@ -188,12 +240,9 @@ const CreateDonation = () => {
         }
       };
 
-      const result = await createDonation(payload);
+      const result = id ? await updateDonation(id, payload) : await createDonation(payload);
       if (result.success) {
-        setSuccess('Donation created successfully!');
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 1500);
+        navigate(`/donations/${result.donation._id}`);
       } else {
         setError(result.error);
       }
@@ -204,11 +253,13 @@ const CreateDonation = () => {
     }
   };
 
+  if (fetching) return <Box role="status" sx={{ p: 5, textAlign: 'center' }}><CircularProgress /></Box>;
+  if (loadError) return <Alert severity="error">{loadError}</Alert>;
   if (!user || (user.role !== 'donor' && user.role !== 'admin')) {
     return (
       <Container maxWidth="md" sx={{ py: 4 }}>
         <Alert severity="error" variant="outlined" sx={{ borderRadius: 2.5 }}>
-          Only validated donors can create donations. Please contact admin support for credential checks.
+          A donor account is required to share food.
         </Alert>
       </Container>
     );
@@ -230,8 +281,8 @@ const CreateDonation = () => {
           >
             Dashboard
           </Button>
-          <Typography variant="h4" sx={{ fontWeight: 800, mt: 1, letterSpacing: '-0.5px' }}>
-            List Surplus Donation
+          <Typography component="h1" variant="h4" sx={{ fontWeight: 800, mt: 1, letterSpacing: '-0.5px' }}>
+            {id ? 'Edit your donation' : 'Share surplus food'}
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.9rem' }}>
             Provide accurate metrics and pickup timelines to ensure smooth distribution.
@@ -256,7 +307,7 @@ const CreateDonation = () => {
               <Grid container spacing={3.5}>
                 
                 {/* 1. Food Details */}
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }} >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
                     <Box sx={{ width: 32, height: 32, borderRadius: 1.5, bgcolor: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <FoodIcon sx={{ fontSize: 18, color: '#10b981' }} />
@@ -268,7 +319,7 @@ const CreateDonation = () => {
                   <Divider sx={{ mt: 1.5 }} />
                 </Grid>
 
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }} >
                   <TextField
                     fullWidth
                     label="Donation Title"
@@ -279,7 +330,7 @@ const CreateDonation = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }} >
                   <TextField
                     fullWidth
                     label="Description"
@@ -292,7 +343,47 @@ const CreateDonation = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12} sm={6}>
+                {/* Donation Image Upload */}
+                <Grid size={{ xs: 12 }} >
+                  <Box sx={{ p: 2, border: '1px dashed #cbd5e1', borderRadius: 2, bgcolor: '#f8fafc' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
+                      Donation Image (Optional)
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1.5 }}>
+                      Upload photos of the food surplus (JPEG, PNG, WEBP, up to 5MB)
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      component="label"
+                      disabled={uploadingImage}
+                      size="small"
+                      sx={{ mr: 2 }}
+                    >
+                      {uploadingImage ? 'Uploading...' : 'Choose Image'}
+                      <input
+                        type="file"
+                        hidden
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        onChange={handleImageUpload}
+                      />
+                    </Button>
+                    {formData.images && formData.images.length > 0 && (
+                      <Stack direction="row" spacing={1.5} sx={{ mt: 2 }} flexWrap="wrap">
+                        {formData.images.map((img, idx) => (
+                          <Chip
+                            key={idx}
+                            label={`Image ${idx + 1}`}
+                            onDelete={() => handleRemoveImage(idx)}
+                            color="primary"
+                            variant="outlined"
+                          />
+                        ))}
+                      </Stack>
+                    )}
+                  </Box>
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <FormControl fullWidth required>
                     <InputLabel id="food-type-label">Food Category</InputLabel>
                     <Select
@@ -311,7 +402,7 @@ const CreateDonation = () => {
                   </FormControl>
                 </Grid>
 
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <FormControlLabel
                     control={
                       <Checkbox
@@ -331,10 +422,10 @@ const CreateDonation = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <TextField
                     fullWidth
-                    label="Quantity Metrics"
+                    label="Quantity"
                     type="number"
                     value={formData.quantity.amount}
                     onChange={(e) => handleNestedChange('quantity', 'amount', e.target.value)}
@@ -344,7 +435,8 @@ const CreateDonation = () => {
                         <InputAdornment position="end">
                           <FormControl sx={{ minWidth: 110 }} size="small">
                             <Select
-                              value={formData.quantity.unit}
+                              inputProps={{ 'aria-label': 'Quantity unit' }}
+                          value={formData.quantity.unit}
                               onChange={(e) => handleNestedChange('quantity', 'unit', e.target.value)}
                               sx={{ border: 'none', '& .MuiOutlinedInput-notchedOutline': { border: 'none' } }}
                             >
@@ -361,9 +453,9 @@ const CreateDonation = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12} sm={6} />
+                <Grid size={{ xs: 12, sm: 6 }} />
 
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <DateTimePicker
                     label="Preparation Time"
                     value={formData.preparationDate}
@@ -372,7 +464,7 @@ const CreateDonation = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <DateTimePicker
                     label="Expiry Time Limit"
                     value={formData.expiryDate}
@@ -383,7 +475,7 @@ const CreateDonation = () => {
                 </Grid>
 
                 {/* Allergens selection */}
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }} >
                   <Typography variant="body2" sx={{ fontWeight: 700, mb: 1.5, color: '#475569' }}>
                     Allergen Warnings
                   </Typography>
@@ -412,7 +504,7 @@ const CreateDonation = () => {
                 </Grid>
 
                 {/* 2. Logistics & Pickup Window */}
-                <Grid item xs={12} sx={{ mt: 2 }}>
+                <Grid size={{ xs: 12 }} sx={{ mt: 2 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
                     <Box sx={{ width: 32, height: 32, borderRadius: 1.5, bgcolor: 'rgba(245, 158, 11, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <TimeIcon sx={{ fontSize: 18, color: '#f59e0b' }} />
@@ -424,7 +516,7 @@ const CreateDonation = () => {
                   <Divider sx={{ mt: 1.5 }} />
                 </Grid>
 
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <DateTimePicker
                     label="Pickup Window Start"
                     value={formData.pickupWindow.startTime}
@@ -434,7 +526,7 @@ const CreateDonation = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }} >
                   <DateTimePicker
                     label="Pickup Window End"
                     value={formData.pickupWindow.endTime}
@@ -445,19 +537,19 @@ const CreateDonation = () => {
                 </Grid>
 
                 {/* 3. Address & Coordinates */}
-                <Grid item xs={12} sx={{ mt: 2 }}>
+                <Grid size={{ xs: 12 }} sx={{ mt: 2 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
                     <Box sx={{ width: 32, height: 32, borderRadius: 1.5, bgcolor: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <LocationIcon sx={{ fontSize: 18, color: '#10b981' }} />
                     </Box>
                     <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.3px' }}>
-                      Location Coordinates
+                      Pickup location
                     </Typography>
                   </Box>
                   <Divider sx={{ mt: 1.5 }} />
                 </Grid>
 
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }} >
                   <TextField
                     fullWidth
                     label="Street Address"
@@ -468,7 +560,7 @@ const CreateDonation = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12} sm={4}>
+                <Grid size={{ xs: 12, sm: 4 }} >
                   <TextField
                     fullWidth
                     label="City"
@@ -478,7 +570,7 @@ const CreateDonation = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12} sm={4}>
+                <Grid size={{ xs: 12, sm: 4 }} >
                   <TextField
                     fullWidth
                     label="State"
@@ -488,7 +580,7 @@ const CreateDonation = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12} sm={4}>
+                <Grid size={{ xs: 12, sm: 4 }} >
                   <TextField
                     fullWidth
                     label="ZIP Code"
@@ -498,7 +590,8 @@ const CreateDonation = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}><TextField fullWidth required label="Country" value={formData.location.address.country || ''} onChange={event => handleAddressChange('country', event.target.value)} inputProps={{ maxLength: 80 }} /></Grid>
+                <Grid size={{ xs: 12 }} >
                   <TextField
                     fullWidth
                     label="Additional Coordination Notes"
@@ -511,14 +604,14 @@ const CreateDonation = () => {
                 </Grid>
 
                 {/* 4. Tags & Extra Metadata */}
-                <Grid item xs={12} sx={{ mt: 2 }}>
+                <Grid size={{ xs: 12 }} sx={{ mt: 2 }}>
                   <Typography variant="h6" sx={{ fontWeight: 800, mb: 1, letterSpacing: '-0.3px' }}>
                     Metadata Tags
                   </Typography>
                   <Divider sx={{ mb: 2 }} />
                 </Grid>
 
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }} >
                   <TextField
                     fullWidth
                     label="Extra Instructions"
@@ -565,13 +658,13 @@ const CreateDonation = () => {
                 </Grid>
 
                 {/* Submissions Control */}
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }} >
                   <Divider sx={{ my: 2 }} />
                   <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 1 }}>
                     <Button
                       variant="outlined"
                       onClick={() => navigate('/dashboard')}
-                      disabled={loading}
+                      disabled={loading || uploadingImage}
                       sx={{ color: '#475569', borderColor: '#cbd5e1' }}
                     >
                       Cancel Listing
@@ -580,10 +673,10 @@ const CreateDonation = () => {
                       type="submit"
                       variant="contained"
                       startIcon={loading ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <SaveIcon />}
-                      disabled={loading}
+                      disabled={loading || uploadingImage}
                       sx={{ px: 4 }}
                     >
-                      {loading ? 'Creating...' : 'Submit Donation'}
+                      {loading ? 'Saving…' : id ? 'Save changes' : 'Publish donation'}
                     </Button>
                   </Box>
                 </Grid>

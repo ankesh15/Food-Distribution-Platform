@@ -1,0 +1,30 @@
+
+> food-distribution-platform@1.0.0 build
+> cd client && npm run build
+
+
+> client@0.1.0 build
+> react-scripts build
+
+Creating an optimized production build...
+Compiled successfully.
+
+File sizes after gzip:
+
+  338.77 kB (+30 B)  build/static/js/main.8f4299d6.js
+  9.34 kB            build/static/css/main.ca842e53.css
+  1.77 kB            build/static/js/453.6a44dda7.chunk.js
+
+The project was built assuming it is hosted at /.
+You can control this with the homepage field in your package.json.
+
+The build folder is ready to be deployed.
+You may serve it with a static server:
+
+  npm install -g serve
+  serve -s build
+
+Find out more about deployment here:
+
+  https://cra.link/deployment
+

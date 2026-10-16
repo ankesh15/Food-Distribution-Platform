@@ -1,101 +1,163 @@
-# Dependencies
+# ==============================================================================
+# Food Distribution Platform - Git Ignore Rules
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Secrets, Environment Files & Local Configuration
+# ------------------------------------------------------------------------------
+# Environment variable files containing sensitive credentials
+.env
+.env.*
+!.env.example
+client/.env.local
+client/.env.*.local
+!client/.env.example
+
+# Private keys, certificates, and credentials
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+
+# Cloud provider and local CLI credentials / state
+.aws/
+.azure/
+.gcp/
+
+# ------------------------------------------------------------------------------
+# Dependencies & Package Manager Artifacts
+# ------------------------------------------------------------------------------
 node_modules/
+client/node_modules/
+jspm_packages/
+
+# Package manager caches, locks, and integrity files
+.npm/
+.yarn-integrity
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp
+.pnp.js
+
+# ------------------------------------------------------------------------------
+# Build Outputs & Bundles
+# ------------------------------------------------------------------------------
+/build/
+/dist/
+/client/build/
+/client/dist/
+.cache/
+.parcel-cache/
+*.tgz
+
+# ------------------------------------------------------------------------------
+# Runtime, Logs & Process Data
+# ------------------------------------------------------------------------------
+logs/
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+lerna-debug.log*
 
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Build outputs
-/build
-/dist
-/client/build
-/client/dist
-
-# Logs
-logs
-*.log
-
-# Runtime data
-pids
+# Process IDs and runtime state
+pids/
 *.pid
 *.seed
 *.pid.lock
 
-# Coverage directory used by tools like istanbul
+# Crash dumps, heap snapshots & profiling data
+core
+core.*
+*.cpuprofile
+*.heapsnapshot
+.v8flags*
+
+# ------------------------------------------------------------------------------
+# Uploads & Local Application Data
+# ------------------------------------------------------------------------------
+# User-uploaded donation images (preserve placeholder .gitkeep)
+server/uploads/*
+!server/uploads/.gitkeep
+
+# Local database dumps and temporary storage
+*.sqlite
+*.sqlite3
+*.db
+dump.rdb
+.dynamodb/
+mongo-dump/
+
+# Local temporary storage, test binaries, and scratch files
+tmp/
+.tmp/
+scratch/
+
+# ------------------------------------------------------------------------------
+# Test & Code Quality Artifacts
+# ------------------------------------------------------------------------------
 coverage/
+client/coverage/
 *.lcov
-
-# nyc test coverage
-.nyc_output
-
-# Dependency directories
-jspm_packages/
-
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
+.nyc_output/
 .eslintcache
-
-# Optional REPL history
 .node_repl_history
 
-# Output of 'npm pack'
-*.tgz
+# Temporary and scratch files
+*.tmp
+*.temp
 
-# Yarn Integrity file
-.yarn-integrity
-
-# dotenv environment variables file
-.env
-
-# parcel-bundler cache (https://parceljs.org/)
-.cache
-.parcel-cache
-
-# next.js build output
-.next
-
-# nuxt.js build output
-.nuxt
-
-# vuepress build output
-.vuepress/dist
-
-# Serverless directories
-.serverless
-
-# FuseBox cache
-.fusebox/
-
-# DynamoDB Local files
-.dynamodb/
-
-# TernJS port file
-.tern-port
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS generated files
+# ------------------------------------------------------------------------------
+# Operating System & File System Metadata
+# ------------------------------------------------------------------------------
+# macOS
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
-Thumbs.db
 
-# Temporary files
-*.tmp
-*.temp 
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Linux editor backup files
+*~
+
+# ------------------------------------------------------------------------------
+# Editor, IDE & Local Agent Configurations
+# ------------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*.sw?
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+.project
+.classpath
+.settings/
+.agents/
+.codex/
+
+# ------------------------------------------------------------------------------
+# Docker & Deployment Local Overrides
+# ------------------------------------------------------------------------------
+docker-compose.override.yml
+*.local.yml
+
+# ------------------------------------------------------------------------------
+# Local Project Documentation & Operator Guides
+# ------------------------------------------------------------------------------
+FOOD_DISTRIBUTION_PLATFORM_GUIDE.md
