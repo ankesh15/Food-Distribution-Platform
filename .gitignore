@@ -161,3 +161,6 @@ docker-compose.override.yml
 # Local Project Documentation & Operator Guides
 # ------------------------------------------------------------------------------
 FOOD_DISTRIBUTION_PLATFORM_GUIDE.md
+AUDIT_REPORT.md
+FINAL_FIX_REPORT.md
+PRODUCTION_READINESS_REPORT.md
